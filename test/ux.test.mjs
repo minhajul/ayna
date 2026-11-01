@@ -678,6 +678,20 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.doesNotMatch(judged.lines.join(' '), /task-\d|lowContrast|smallTargets/);
   });
 
+  test('everything in the rail starts on one edge', async () => {
+    let edges = null;
+    await withConsole(async (page) => {
+      edges = await page.evaluate(() => {
+        const rail = document.querySelector('.ayna-ov-console').getBoundingClientRect().left;
+        const at = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left - rail);
+        return { header: at('.ayna-ov-dotlive'), empty: at('.ayna-ov-empty-lead'), say: at('.ayna-ov-say-box') };
+      });
+    });
+    // The task panel's empty state shares a class with the rail's, and its
+    // padding once leaked in and pushed the rail's 14px further in than the rest.
+    assert.deepEqual(edges, { header: edges.header, empty: edges.header, say: edges.header });
+  });
+
   test('never covers the app, open or minimised', async () => {
     /*
       A panel that sits on top of the thing you are reviewing is not a panel.

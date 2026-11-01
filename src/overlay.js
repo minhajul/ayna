@@ -249,7 +249,12 @@
     .${NS}-console-lines {
       overflow-y: auto; padding: 12px 14px; flex: 1 1 auto; min-height: 0;
     }
-    .${NS}-empty { padding: 4px 0 0; }
+    /*
+      Scoped to the rail. The task panel's empty state shares the class, and its
+      later rule (18px 14px) won on source order, which put everything in an
+      empty rail 14px further in than the header and the Earlier line.
+    */
+    .${NS}-console-lines > .${NS}-empty { padding: 4px 0 0; }
     .${NS}-empty p { margin: 0; }
     .${NS}-empty-lead {
       color: var(--ayna-muted, rgba(255,255,255,.62));
@@ -283,7 +288,8 @@
     .${NS}-earlier[hidden], .${NS}-console.${NS}-min .${NS}-earlier { display: none; }
     .${NS}-earlier span { flex: 1; min-width: 0; }
     .${NS}-earlier button {
-      flex: none; background: transparent; border: 0; padding: 1px 6px; border-radius: 6px; cursor: pointer;
+      /* The header's Hide uses the same side padding, so the two end on one edge. */
+      flex: none; background: transparent; border: 0; padding: 1px 8px; border-radius: 6px; cursor: pointer;
       color: var(--ayna-muted, rgba(255,255,255,.62)); font: inherit;
     }
     .${NS}-earlier button:hover { background: var(--ayna-line, rgba(255,255,255,.075)); color: var(--ayna-text, #f4f2ef); }
@@ -502,7 +508,7 @@
       the bar was the loudest thing on the rail whether or not there was
       anything to send. The arrow only lights once there is.
     */
-    .${NS}-console-say { flex: none; padding: 10px 12px 12px; border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075)); }
+    .${NS}-console-say { flex: none; padding: 10px 14px 12px; border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075)); }
     .${NS}-say-box {
       display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px;
       background: rgba(0,0,0,.32); border-radius: 10px;
