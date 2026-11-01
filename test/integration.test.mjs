@@ -2216,6 +2216,8 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
             await writeFile(path.join(out, 'applied'), '1');
             await page.waitForSelector('.ayna-ov-round [data-act=undo]', { timeout: 20000 });
             await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+            // A card left over from another process asks with that process's key.
+            seen.stale = await page.evaluate(() => window.__aynaUndo('abcdef.1'));
 
             // Someone edits the same file again before the undo.
             await writeFile(css, original + '.title{letter-spacing:-0.03em}\n');
@@ -2245,6 +2247,7 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
           },
         });
 
+        assert.deepEqual(seen.stale, { ok: false, reason: 'that round was in an earlier window' });
         assert.equal(seen.refused, 'Not undone: styles.css changed after this round');
         assert.equal(seen.afterRefusal, original + '.title{letter-spacing:-0.03em}\n', 'the later edit was left alone');
         assert.equal(await readFile(css, 'utf8'), original, 'the stylesheet is back to before the round');

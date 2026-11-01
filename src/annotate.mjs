@@ -540,6 +540,14 @@ export async function runAnnotate({
   const roundFiles = new Map();
   // Which notes went out with each round, so undoing it can reopen them.
   const roundNotes = new Map();
+  /*
+    Rounds are numbered per process, and a window can outlive one: an agent that
+    resumes its session reuses its tab, so a rail can show a dead process's
+    "Round 1" next to this one's. Undo is asked for by this key, never by the
+    bare number, so an old card can never take back the wrong round's files.
+  */
+  const windowKey = Math.random().toString(36).slice(2, 8);
+  const roundKey = (n) => `${windowKey}.${n}`;
   let projectWatcher = null;
   const watchProject = () => {
     if (projectWatcher || !projectDir) return;
@@ -720,8 +728,10 @@ export async function runAnnotate({
 
     Not while Claude is working: a round in flight is writing the same files.
   */
-  await page.exposeFunction('__aynaUndo', async (forRound) => {
-    const n = Number(forRound);
+  await page.exposeFunction('__aynaUndo', async (key) => {
+    const [owner, number] = String(key).split('.');
+    if (owner !== windowKey) return { ok: false, reason: 'that round was in an earlier window' };
+    const n = Number(number);
     const changes = roundFiles.get(n);
     if (!changes?.length) return { ok: false, reason: 'nothing to undo' };
     if (phase === 'awaiting-claude') return { ok: false, reason: `Claude is working on round ${round}` };
@@ -1226,6 +1236,7 @@ export async function runAnnotate({
       emit({
         event: 'applied',
         round,
+        key: roundKey(round),
         via: reason,
         reloaded: !changedItself,
         files: changes.map(({ file, status, added, removed }) => ({ file, status, added, removed })),

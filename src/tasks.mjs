@@ -190,9 +190,11 @@ export async function openStore(projectDir, { db: given } = {}) {
       }
       db.prepare(`INSERT INTO tasks (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`).run(...values);
       db.prepare('INSERT INTO task_history (task_id, at, status) VALUES (?, ?, ?)').run(next, now, status);
+      // `source` says who raised it — the user, Claude, or a check — so a reader
+      // of the log can sign the line without loading the task.
       appendEvent(db, {
         event: 'task', taskId: next, tabId: cols.tab_id ?? null,
-        status, comment: cols.comment ?? null, url: cols.url ?? null,
+        status, comment: cols.comment ?? null, url: cols.url ?? null, source: extra.source ?? null,
       });
       return next;
     });

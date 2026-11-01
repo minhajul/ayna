@@ -99,7 +99,7 @@ describe('task store', () => {
       const monday = sessions.openTab({ url: 'http://x/', sessionId });
       const tuesday = sessions.openTab({ url: 'http://x/', sessionId });
 
-      const t = await store.create({ comment: 'x', tabId: monday });
+      const t = await store.create({ comment: 'x', tabId: monday, source: 'user' });
       assert.equal(t.tabId, monday, 'the task remembers the window it was raised in');
 
       // Carried over and judged in a later window: the verdict belongs to that one.
@@ -113,6 +113,7 @@ describe('task store', () => {
         logged.map((e) => [e.status, e.tabId ?? null]),
         [['open', monday], ['approved', tuesday], ['open', null]],
       );
+      assert.equal(logged[0].source, 'user', 'and who raised it, so the line can be signed');
     } finally {
       await dispose();
     }

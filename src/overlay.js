@@ -3408,7 +3408,7 @@
     or why not now — rather than failing quietly, since the user pressed it
     expecting their files back.
   */
-  function undoControl(round, files) {
+  function undoControl(key, files) {
     const acts = document.createElement('div');
     acts.className = NS + '-round-acts';
     const go = document.createElement('button');
@@ -3441,7 +3441,7 @@
         return;
       }
       go.disabled = true;
-      const done = await window.__aynaUndo?.(round).catch((err) => ({ ok: false, reason: err.message }));
+      const done = await window.__aynaUndo?.(key).catch((err) => ({ ok: false, reason: err.message }));
       if (done?.ok) {
         // The changes are gone, so there is nothing left on the page to judge.
         if (state.phase === 'review') {
@@ -3474,7 +3474,12 @@
       // A note being raised: it belongs to the round that has not been sent yet.
       if (e.status === 'proposed') {
         noteOfTask.set(e.taskId, e.comment);
-        const row = item({ who: 'Claude', lane: 'claude', text: e.comment ?? '', detail: 'a suggestion · waiting for your word', at: e.at });
+        // Claude's own suggestions, or a check's (the taste review files these).
+        const ours = e.source && e.source !== 'claude';
+        const row = item({
+          who: ours ? 'ayna' : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
+          detail: 'a suggestion · waiting for your word',
+        });
         if (last) addToCard(last, row);
         else lines.appendChild(row);
         return true;
@@ -3535,6 +3540,7 @@
       }));
       if (files.length) row.appendChild(fileList(e.round, files));
       card.files = files;
+      card.key = e.key;
       setCard(card, 'ready');
       return true;
     }
@@ -3546,7 +3552,7 @@
       // Offered once the round has finished landing — the check is the last
       // step of that — so an undo never races the reload that shows the change.
       if (card.files?.length && card.state !== 'undone' && !card.el.querySelector('.' + NS + '-round-acts')) {
-        card.el.appendChild(undoControl(e.round, card.files));
+        card.el.appendChild(undoControl(card.key ?? e.round, card.files));
       }
       return true;
     }
