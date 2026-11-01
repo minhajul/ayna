@@ -678,6 +678,69 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.doesNotMatch(judged.lines.join(' '), /task-\d|lowContrast|smallTargets/);
   });
 
+  test('a finished round folds when the next one starts, and opens again on a click', async () => {
+    const seen = {};
+    await withConsole(async (page, dir) => {
+      const rounds = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll('.ayna-ov-round')].map((c) => ({
+            title: c.querySelector('.ayna-ov-round-head b').textContent,
+            folded: c.hasAttribute('data-folded'),
+            expanded: c.querySelector('.ayna-ov-round-head').getAttribute('aria-expanded'),
+            sum: c.querySelector('.ayna-ov-round-sum').textContent,
+          })),
+        );
+      const note = async (text) => {
+        await page.click('.t');
+        await page.waitForSelector('.ayna-ov-pop textarea');
+        await page.fill('.ayna-ov-pop textarea', text);
+        await page.click('.ayna-ov-save');
+        await page.waitForTimeout(400);
+      };
+
+      await note('make it bigger');
+      await page.click('[data-act=send]');
+      await page.waitForTimeout(600);
+      await writeFile(path.join(dir, 'out', 'applied'), '1');
+      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await page.waitForTimeout(1300);
+      seen.judged = await rounds();
+
+      // The next round begins: the approved one gets out of the way.
+      await page.click('[data-act=more]');
+      await page.waitForTimeout(400);
+      await note('and bolder');
+      await page.waitForTimeout(1300);
+      seen.next = await rounds();
+
+      await page.click('.ayna-ov-round-head');
+      seen.clicked = (await rounds())[0];
+      await page.focus('.ayna-ov-round-head');
+      await page.keyboard.press('Enter');
+      seen.keyed = (await rounds())[0];
+
+      // Opened by hand, it stays open through a reload.
+      await page.click('.ayna-ov-round-head');
+      await page.reload();
+      await page.waitForSelector('.ayna-ov-round', { timeout: 10000 });
+      await page.waitForTimeout(1500);
+      seen.reloaded = (await rounds())[0];
+    });
+
+    assert.equal(seen.judged.length, 1);
+    assert.equal(seen.judged[0].folded, false, 'the only round is never folded away');
+    assert.deepEqual(
+      seen.next.map((r) => [r.title, r.folded]),
+      [['Round 1', true], ['Next round', false]],
+    );
+    assert.equal(seen.next[0].sum, '1 note', 'folded, it still says what it held');
+    assert.equal(seen.next[0].expanded, 'false');
+    assert.equal(seen.clicked.folded, false);
+    assert.equal(seen.keyed.folded, true, 'Enter on the header folds it, like a click');
+    assert.equal(seen.reloaded.folded, false);
+  });
+
   test('everything in the rail starts on one edge', async () => {
     let edges = null;
     await withConsole(async (page) => {

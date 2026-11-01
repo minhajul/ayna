@@ -390,6 +390,27 @@
       font: 600 12px/1.4 -apple-system, system-ui, sans-serif;
     }
     .${NS}-round-head .${NS}-at { font-weight: 400; }
+    .${NS}-round-head { cursor: pointer; user-select: none; border-radius: 10px 10px 0 0; }
+    .${NS}-round-head:hover { background: rgba(255,255,255,.03); }
+    .${NS}-round-head:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: -2px; }
+    .${NS}-chev {
+      flex: none; width: 6px; height: 6px; margin: 0 2px 3px 1px;
+      border-right: 1.5px solid var(--ayna-dim, rgba(255,255,255,.46));
+      border-bottom: 1.5px solid var(--ayna-dim, rgba(255,255,255,.46));
+      transform: rotate(45deg); transition: transform .15s;
+    }
+    .${NS}-round[data-folded] .${NS}-chev { transform: rotate(-45deg); margin-bottom: 0; }
+    .${NS}-round-sum {
+      display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--ayna-dim, rgba(255,255,255,.46)); font: 400 11.5px/1.4 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-round-head b, .${NS}-round-head .${NS}-at { flex: none; white-space: nowrap; }
+    .${NS}-round[data-folded] .${NS}-round-sum { display: inline; flex: 1 1 auto; }
+    /* Folded, the line is for what the round held; its time is inside. */
+    .${NS}-round[data-folded] .${NS}-round-head .${NS}-at { display: none; }
+    .${NS}-round[data-folded] .${NS}-round-head { border-bottom-color: transparent; border-radius: 10px; }
+    .${NS}-round[data-folded] .${NS}-round-body,
+    .${NS}-round[data-folded] .${NS}-round-acts { display: none; }
     .${NS}-pill {
       margin-left: auto; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
       border: 1px solid currentColor; color: var(--ayna-dim, rgba(255,255,255,.46));
@@ -3252,20 +3273,80 @@
 
   // Plain divs: this lives in the app's document, and an app is free to style
   // section and header — the demo pads every section by a screen's height.
-  function newCard(lines, state) {
+  /*
+    A round folds to its header.
+
+    A long review is a column of finished rounds above the one that matters,
+    and scrolling past them to reach it is the cost window-scoping was there to
+    remove. So a round folds once it is settled and a newer one exists, to a
+    line that still says how it went, and any round opens again on a click.
+    One still waiting on you or on Claude never folds by itself.
+
+    A fold made by hand is remembered for the tab, keyed by the event that
+    began the round — the same on every rebuild, so a reload keeps it.
+  */
+  const SETTLED = new Set(['approved', 'sentback', 'undone']);
+  const FOLDS = 'ayna-folds';
+  const folds = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(FOLDS) || '{}');
+    } catch {
+      return {};
+    }
+  })();
+
+  function setFold(card, folded, byHand = false) {
+    // A boolean, always: toggleAttribute(name, undefined) toggles instead of clearing.
+    card.folded = Boolean(folded);
+    card.el.toggleAttribute('data-folded', card.folded);
+    card.head.setAttribute('aria-expanded', String(!card.folded));
+    const notes = card.tasks.size;
+    const files = card.files?.length ?? 0;
+    card.el.querySelector('.' + NS + '-round-sum').textContent =
+      [notes && plural(notes, 'note'), files && plural(files, 'file')].filter(Boolean).join(' · ');
+    if (!byHand) return;
+    folds[card.id] = folded;
+    try {
+      sessionStorage.setItem(FOLDS, JSON.stringify(folds));
+    } catch {
+      // Unremembered is fine; it folds again on the next rebuild.
+    }
+  }
+
+  /** Fold what is finished, unless the user has said otherwise for that round. */
+  function foldSettled() {
+    for (const c of cards.slice(0, -1)) {
+      if (!(c.id in folds) && SETTLED.has(c.state) && !c.folded) setFold(c, true);
+    }
+  }
+
+  function newCard(lines, state, id) {
     const el = document.createElement('div');
     el.className = NS + '-round';
     el.innerHTML =
-      '<div class="' + NS + '-round-head"><b></b><i class="' + NS + '-at"></i>' +
-      '<span class="' + NS + '-pill"></span></div>' +
+      '<div class="' + NS + '-round-head" role="button" tabindex="0" aria-expanded="true">' +
+        '<span class="' + NS + '-chev" aria-hidden="true"></span><b></b><i class="' + NS + '-at"></i>' +
+        '<span class="' + NS + '-round-sum"></span><span class="' + NS + '-pill"></span>' +
+      '</div>' +
       '<div class="' + NS + '-round-body"></div>';
     lines.appendChild(el);
     const card = {
-      el, body: el.querySelector('.' + NS + '-round-body'), tasks: new Map(), raised: new Set(),
-      round: null, state: null, lastAt: '',
+      el, head: el.querySelector('.' + NS + '-round-head'), body: el.querySelector('.' + NS + '-round-body'),
+      tasks: new Map(), raised: new Set(), round: null, state: null, lastAt: '', id: String(id ?? cards.length),
     };
+    const toggle = () => setFold(card, !card.folded, true);
+    card.head.addEventListener('click', toggle);
+    card.head.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      // The page underneath is in comment mode, where keys are shortcuts.
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggle();
+    });
     cards.push(card);
     setCard(card, state);
+    setFold(card, folds[card.id] ?? false);
+    foldSettled();
     return card;
   }
 
@@ -3276,6 +3357,10 @@
     card.el.querySelector('b').textContent = card.round ? 'Round ' + card.round : 'Next round';
     if (at) card.el.querySelector('.' + NS + '-at').textContent = card.lastAt = clock(at);
     card.el.querySelector('.' + NS + '-pill').textContent = CARD_STATE[state];
+    if (card.head) {
+      setFold(card, card.folded);
+      foldSettled();
+    }
   }
 
   /** Once every note in a round is judged, the card says how it went. */
@@ -3509,7 +3594,7 @@
         else lines.appendChild(row);
         return true;
       }
-      const card = last && last.state === 'drafting' ? last : newCard(lines, 'drafting');
+      const card = last && last.state === 'drafting' ? last : newCard(lines, 'drafting', e.seq);
       card.tasks.set(e.taskId, e.status ?? 'open');
       card.raised.add(e.taskId);
       cardOfTask.set(e.taskId, card);
@@ -3540,7 +3625,7 @@
     }
 
     if (e.event === 'round') {
-      const card = last && last.state === 'drafting' ? last : newCard(lines, 'waiting');
+      const card = last && last.state === 'drafting' ? last : newCard(lines, 'waiting', e.seq);
       setCard(card, 'waiting', { round: e.round, at: e.at });
       // Every note the round carries is the round's to settle, wherever it was
       // written — a retry, or work left open by another window.
