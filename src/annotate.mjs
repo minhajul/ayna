@@ -622,13 +622,39 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaFeed', async (since = 0) => {
     if (store?.db) {
       try {
-        const { eventsSince } = await import('./db.mjs');
-        return eventsSince(store.db, Number(since) || 0, 200);
+        const { eventsSince, windowEventsSince } = await import('./db.mjs');
+        return tabId
+          ? windowEventsSince(store.db, tabId, Number(since) || 0, 200)
+          : eventsSince(store.db, Number(since) || 0, 200);
       } catch {
         // Fall through to the mirror rather than leaving the panel blank.
       }
     }
     return feed.filter((e) => e.seq > (Number(since) || 0));
+  });
+
+  /*
+    One line for everything before this window.
+
+    Scoping the activity to this window must not make earlier work disappear —
+    a note left open last time is still owed, and it is what the user most
+    needs to know about the past. So the panel says how many windows came
+    before and how much they left open, and the Tasks list has the detail.
+  */
+  await page.exposeFunction('__aynaEarlier', async () => {
+    if (!store?.db || !tabId) return { windows: 0, open: 0 };
+    try {
+      const mine = store.db.prepare('SELECT opened_at FROM tabs WHERE id = ?').get(tabId)?.opened_at ?? Date.now();
+      const { windows } = store.db
+        .prepare('SELECT COUNT(*) AS windows FROM tabs WHERE id <> ? AND opened_at < ?')
+        .get(tabId, mine);
+      const { isPending } = await import('./tasks.mjs');
+      // Raised before this window opened, by any window or none, and not yet settled.
+      const open = (await store.list()).filter((t) => isPending(t) && Date.parse(t.createdAt) < mine).length;
+      return { windows, open };
+    } catch {
+      return { windows: 0, open: 0 };
+    }
   });
 
   /*

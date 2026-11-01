@@ -273,6 +273,20 @@
       color: var(--ayna-dim, rgba(255,255,255,.46));
       font: 12px/1.45 -apple-system, system-ui, sans-serif;
     }
+    /* The past, in one line: how many windows came before, and what they left open. */
+    .${NS}-earlier {
+      display: flex; align-items: center; gap: 8px; flex: none;
+      padding: 7px 14px; border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+      color: var(--ayna-dim, rgba(255,255,255,.46));
+      font: 11.5px/1.45 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-earlier[hidden], .${NS}-console.${NS}-min .${NS}-earlier { display: none; }
+    .${NS}-earlier span { flex: 1; min-width: 0; }
+    .${NS}-earlier button {
+      flex: none; background: transparent; border: 0; padding: 1px 6px; border-radius: 6px; cursor: pointer;
+      color: var(--ayna-muted, rgba(255,255,255,.62)); font: inherit;
+    }
+    .${NS}-earlier button:hover { background: var(--ayna-line, rgba(255,255,255,.075)); color: var(--ayna-text, #f4f2ef); }
     /*
       Let a line be a line.
 
@@ -3154,10 +3168,30 @@
     }
   }
 
+  /*
+    The activity shows this window only, so the past gets one line: how many
+    windows came before, and how much they left open. "Show" opens the task
+    list, which already groups that work by page.
+  */
+  async function pumpEarlier() {
+    if (!consoleEl || !window.__aynaEarlier) return;
+    const el = consoleEl.querySelector('.' + NS + '-earlier');
+    const { windows = 0, open = 0 } = (await window.__aynaEarlier().catch(() => null)) ?? {};
+    el.hidden = !windows && !open;
+    if (el.hidden) return;
+    const parts = ['Earlier'];
+    if (windows) parts.push(plural(windows, 'window'));
+    parts.push(open ? plural(open, 'note') + ' still open' : 'nothing left open');
+    el.querySelector('span').textContent = parts.join(' · ');
+    el.querySelector('button').hidden = !open;
+  }
+
   async function pumpConsole() {
     if (!consoleEl || !window.__aynaFeed) return;
     const events = await window.__aynaFeed(consoleSeq).catch(() => []);
     if (!events || !events.length) return;
+    // A verdict on carried-over work changes what the earlier line owes.
+    if (events.some((e) => e.event === 'task')) pumpEarlier();
 
     const lines = consoleEl.querySelector('.' + NS + '-console-lines');
     // Only follow the tail when the reader is already at it; yanking someone back
@@ -3241,6 +3275,7 @@
         '<span class="' + NS + '-spacer"></span>' +
         '<button data-act="fold">Hide</button>' +
       '</div>' +
+      '<div class="' + NS + '-earlier" hidden><span></span><button data-act="earlier">Show</button></div>' +
       /*
         An empty rail has to say it is empty.
 
@@ -3280,6 +3315,7 @@
     setRailTint();
 
     consoleEl.querySelector('[data-act=fold]').addEventListener('click', () => setConsoleMinimised(!consoleMin));
+    consoleEl.querySelector('[data-act=earlier]').addEventListener('click', () => togglePanel());
 
     const input = consoleEl.querySelector('input');
     const send = async () => {
@@ -3309,6 +3345,7 @@
     }
 
     setConsoleMinimised(consoleMin);
+    pumpEarlier();
     pumpConsole();
     clearInterval(consoleTimer);
     consoleTimer = setInterval(() => {

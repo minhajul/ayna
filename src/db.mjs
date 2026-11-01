@@ -233,20 +233,53 @@ export function appendEvent(db, { event, sessionId = null, tabId = null, taskId 
   return Number(info.lastInsertRowid);
 }
 
+/** A stored row, flattened back into the event shape it was written as. */
+const toEvent = (row) => ({
+  seq: row.seq,
+  at: row.at,
+  event: row.event,
+  ...(row.session_id ? { sessionId: row.session_id } : {}),
+  ...(row.tab_id ? { tabId: row.tab_id } : {}),
+  ...(row.task_id ? { taskId: row.task_id } : {}),
+  ...unpack(row.payload, {}),
+});
+
 /** Everything after `seq`, oldest first, flattened back into the event shape. */
 export function eventsSince(db, seq = 0, limit = 500) {
   return db
     .prepare('SELECT * FROM events WHERE seq > ? ORDER BY seq ASC LIMIT ?')
     .all(Number(seq) || 0, limit)
-    .map((row) => ({
-      seq: row.seq,
-      at: row.at,
-      event: row.event,
-      ...(row.session_id ? { sessionId: row.session_id } : {}),
-      ...(row.tab_id ? { tabId: row.tab_id } : {}),
-      ...(row.task_id ? { taskId: row.task_id } : {}),
-      ...unpack(row.payload, {}),
-    }));
+    .map(toEvent);
+}
+
+/**
+ * What one review window should show, after `seq`.
+ *
+ * Reading the whole log meant every window opened on every earlier window's
+ * story. But "since this window opened" is too narrow: `ayna say` and
+ * `ayna preview` written while no window was open promise to appear in the next
+ * one. So the window gets its own events, plus anything addressed to no window
+ * that came after the last event of the window before it. Events filed under
+ * another window are never shown here.
+ *
+ * `closed` is the one untagged event that always belongs to some other window:
+ * logs written before events were tagged end each review with one.
+ */
+export function windowEventsSince(db, tabId, seq = 0, limit = 500) {
+  const first = db.prepare('SELECT MIN(seq) AS seq FROM events WHERE tab_id = ?').get(tabId)?.seq ?? null;
+  const floor =
+    first === null
+      ? 0
+      : db
+          .prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE seq < ? AND tab_id IS NOT NULL AND tab_id <> ?')
+          .get(first, tabId).seq;
+  return db
+    .prepare(
+      "SELECT * FROM events WHERE seq > ? AND (tab_id = ? OR (tab_id IS NULL AND event <> 'closed')) " +
+        'ORDER BY seq ASC LIMIT ?',
+    )
+    .all(Math.max(Number(seq) || 0, floor), tabId, limit)
+    .map(toEvent);
 }
 
 export const latestSeq = (db) => db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events').get().seq;

@@ -1985,6 +1985,62 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
+  test("a new window's activity starts with this window, and one line for the past", async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const { openStore } = await import('../src/tasks.mjs');
+      const site = path.join(dir, 'site');
+      await fixtureSite(site);
+      const server = await serveStatic(site, 4743);
+      const store = await openStore(dir);
+      const open = (outDir, onReady) =>
+        runAnnotate({
+          browser,
+          store,
+          url: server.url,
+          outDir,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onReady,
+        });
+      try {
+        // Yesterday: one note, sent, and the window closed with it still open.
+        await open(path.join(dir, 'out-1'), async (page) => {
+          await page.click('.title');
+          await page.waitForSelector('.ayna-ov-pop textarea');
+          await page.fill('.ayna-ov-pop textarea', 'tighten this');
+          await page.click('.ayna-ov-save');
+          await page.waitForTimeout(400);
+          await page.click('[data-act=send]');
+          await page.waitForTimeout(500);
+          await page.close();
+        });
+
+        let seen = null;
+        await open(path.join(dir, 'out-2'), async (page) => {
+          await page.waitForFunction(() => !document.querySelector('.ayna-ov-earlier')?.hidden, { timeout: 10000 });
+          await page.waitForTimeout(1200); // a couple of feed polls
+          seen = await page.evaluate(() => ({
+            earlier: document.querySelector('.ayna-ov-earlier span').textContent,
+            log: document.querySelector('.ayna-ov-console-lines').textContent,
+          }));
+          await page.click('[data-act=earlier]');
+          await page.waitForSelector('.ayna-ov-panel', { timeout: 5000 });
+          seen.panel = await page.evaluate(() => document.querySelector('.ayna-ov-panel').textContent);
+          await page.close();
+        });
+
+        assert.equal(seen.earlier, 'Earlier · 1 window · 1 note still open');
+        assert.doesNotMatch(seen.log, /Window closed|Sent to Claude/, `yesterday's rows leaked in: ${seen.log}`);
+        assert.match(seen.panel, /tighten this/, 'Show opens the task list with the open note in it');
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
   test('the comment box never hides under the mode bar', async () => {
     const { dir, dispose } = await tempDir();
     try {
