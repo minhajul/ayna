@@ -8,7 +8,7 @@
 */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -122,6 +122,28 @@ describe('what a round changed', () => {
       assert.equal(change.status, 'modified');
       assert.equal(change.before, undefined, 'there is no "before" to compare or restore');
     } finally {
+      await dispose();
+    }
+  });
+
+  test('a file that was there but unreadable is not called new, so undo cannot delete it', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+    const { dir, dispose } = await project();
+    const locked = path.join(dir, 'src', 'b.tsx');
+    try {
+      await chmod(locked, 0o000);
+      const snap = await snapshotProject(dir, { skipDirs: SKIP, textExt: TEXT });
+      await chmod(locked, 0o644);
+      assert.equal(snap.complete, true, 'the rest of the project was still read');
+      await writeFile(locked, 'export const b = 2;\n');
+
+      const changes = await roundChanges(snap, ['src/b.tsx']);
+      assert.equal(changes[0].status, 'modified');
+      assert.equal(changes[0].undoable, false);
+      const undo = await undoChanges(dir, changes);
+      assert.equal(undo.ok, false);
+      assert.ok(existsSync(locked), 'a file that existed before the round is never deleted by its undo');
+    } finally {
+      await chmod(locked, 0o644).catch(() => {});
       await dispose();
     }
   });

@@ -141,7 +141,7 @@ async function findInSource(projectDir, { id, classes, text }, pageUrl) {
 const SKIP_DIRS = [
   'node_modules', '.git', '.ayna', '.next', '.nuxt', '.svelte-kit', '.output',
   '.turbo', '.cache', '.parcel-cache', 'dist', 'build', 'out', 'coverage',
-  'vendor', '__pycache__',
+  'vendor', '__pycache__', '.venv', 'venv', '.yarn', '.pnpm-store',
 ];
 
 const GREP_EXCLUDES = SKIP_DIRS.map((d) => `--exclude-dir=${d}`);

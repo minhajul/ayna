@@ -27,18 +27,25 @@ const hash = (buf) => (buf === null ? null : createHash('sha1').update(buf).dige
  *
  * `complete` is false when the budget ran out. A file the snapshot never reached
  * has no known "before", which is different from a file that did not exist —
- * so a new file is only called new when the snapshot saw everything.
+ * so a new file is only called new when the snapshot saw everything. The same
+ * goes for a file or folder that was there but could not be read: those are
+ * kept in `unread`, because calling one new would let an undo delete it.
  */
 export async function snapshotProject(root, { skipDirs = [], textExt = new Set(), maxFiles = 4000, maxBytes = 40 * 1024 * 1024 } = {}) {
   const files = new Map();
-  let bytes = 0;
+  const unread = new Set();
   let complete = true;
 
+  // Listed first and read after: the listing is cheap, and the reads can then
+  // run side by side instead of one at a time while Send waits on them.
+  const found = [];
   const walk = async (dir) => {
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
+      if (dir === root) complete = false;
+      else unread.add(posix(path.relative(root, dir)));
       return;
     }
     for (const entry of entries) {
@@ -47,20 +54,35 @@ export async function snapshotProject(root, { skipDirs = [], textExt = new Set()
       if (entry.isDirectory()) {
         if (!skipDirs.includes(entry.name)) await walk(full);
       } else if (entry.isFile() && textExt.has(path.extname(entry.name).toLowerCase())) {
-        const buf = await readFile(full).catch(() => null);
-        if (buf === null) continue;
-        if (files.size >= maxFiles || bytes + buf.length > maxBytes) {
+        if (found.length >= maxFiles) {
           complete = false;
           return;
         }
-        files.set(posix(path.relative(root, full)), buf);
-        bytes += buf.length;
+        found.push(full);
       }
     }
   };
-
   await walk(root);
-  return { root, files, complete };
+
+  let bytes = 0;
+  for (let i = 0; i < found.length && complete; i += 32) {
+    const batch = found.slice(i, i + 32);
+    const bufs = await Promise.all(batch.map((full) => readFile(full).catch(() => null)));
+    for (const [k, full] of batch.entries()) {
+      const rel = posix(path.relative(root, full));
+      if (bufs[k] === null) {
+        unread.add(rel);
+        continue;
+      }
+      if (bytes + bufs[k].length > maxBytes) {
+        complete = false;
+        break;
+      }
+      files.set(rel, bufs[k]);
+      bytes += bufs[k].length;
+    }
+  }
+  return { root, files, unread, complete };
 }
 
 /**
@@ -159,11 +181,13 @@ const isText = (buf) => buf === null || !buf.subarray(0, 8000).includes(0);
  * change.
  */
 export async function roundChanges(snapshot, candidates) {
+  const unread = [...(snapshot.unread ?? [])];
+  const seen = (rel) => snapshot.complete && !unread.some((u) => rel === u || rel.startsWith(`${u}/`));
   const changes = [];
   for (const rel of [...new Set([...candidates].map(posix))].sort()) {
     const after = await readFile(path.join(snapshot.root, rel)).catch(() => null);
     const known = snapshot.files.has(rel);
-    const before = known ? snapshot.files.get(rel) : snapshot.complete ? null : undefined;
+    const before = known ? snapshot.files.get(rel) : seen(rel) ? null : undefined;
     if (before === undefined) {
       // Never read, so there is nothing to compare with and nothing to restore.
       if (after !== null) changes.push({ file: rel, status: 'modified', added: 0, removed: 0, before: undefined, after, undoable: false });
