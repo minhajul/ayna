@@ -508,7 +508,10 @@ did. It is the same event log as everything else, so it survives the session.
 re-measures the page and says whether the faults are actually gone — `clean:
 true`, or the counts that remain. "Done" is a prediction until something looks.
 It stops nothing: the user still decides. But do not claim a fix the gate
-contradicts.
+contradicts. `before` is the same count taken when the round was sent and
+`added` is what is new since, per check — so a fault in `counts` but not in
+`added` was there before your round, and one in `added` is yours. Both are
+`null` when the window ended up on a different page.
 
 ## Before working a task, ask whether it still applies
 

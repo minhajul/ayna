@@ -2041,6 +2041,88 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
+  test('the check after a round tells what the round added from what was already there', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const { openStore } = await import('../src/tasks.mjs');
+      const site = path.join(dir, 'site');
+      // The page starts with one fault of its own: a 9px line of legal text.
+      await fixtureSite(site, { tinyText: true });
+      const out = path.join(dir, 'out');
+      const server = await serveStatic(site, 4744);
+      const events = [];
+      const said = [];
+      try {
+        await runAnnotate({
+          browser,
+          store: await openStore(dir),
+          url: server.url,
+          outDir: out,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onEvent: (e) => events.push(e),
+          onReady: async (page) => {
+            const send = async (sel, txt) => {
+              await page.click(sel);
+              await page.waitForSelector('.ayna-ov-pop textarea');
+              await page.fill('.ayna-ov-pop textarea', txt);
+              await page.click('.ayna-ov-save');
+              await page.waitForTimeout(400);
+              await page.click('[data-act=send]');
+              await page.waitForTimeout(600);
+            };
+            const checkLine = async (n) => {
+              await page.waitForFunction(
+                (n) => document.querySelectorAll('.ayna-ov-round')[n - 1]?.querySelector('[data-lane=ayna] span'),
+                n,
+                { timeout: 20000 },
+              );
+              return page.evaluate((n) => {
+                const row = document.querySelectorAll('.ayna-ov-round')[n - 1].querySelector('[data-lane=ayna]');
+                return row.querySelector('span').textContent + ' | ' + (row.querySelector('small')?.textContent ?? '');
+              }, n);
+            };
+
+            // Round 1 changes nothing measurable.
+            await send('.title', 'tighten this');
+            await writeFile(path.join(out, 'applied'), '1');
+            said.push(await checkLine(1));
+
+            // Round 2 brings a second line of tiny text with it.
+            await page.click('[data-act=more]');
+            await page.waitForTimeout(400);
+            await send('.lede', 'add a disclaimer');
+            const html = path.join(site, 'index.html');
+            const page2 = (await readFile(html, 'utf8')).replace(
+              '</main>',
+              '<small style="font-size:9px">terms apply</small></main>',
+            );
+            await writeFile(html, page2);
+            await writeFile(path.join(out, 'applied'), '1');
+            said.push(await checkLine(2));
+            await page.close();
+          },
+        });
+
+        const [first, second] = events.filter((e) => e.event === 'gate');
+        assert.equal(first.before.tinyText, 1, 'the baseline is taken when the round is sent');
+        assert.equal(first.added.tinyText, 0, 'a fault that was already there is not the round\'s');
+        assert.equal(second.added.tinyText, 1, 'the one the round brought is');
+        // The fixture has a fault or two besides the tiny text; whatever it has was there first.
+        const total = (counts) => Object.values(counts).reduce((a, b) => a + b, 0);
+        assert.equal(said[0], `No new faults | ${total(first.counts)} already there`);
+        assert.equal(
+          said[1],
+          `1 new fault since this round | 1 text under 12px · ${total(second.counts) - 1} already there`,
+        );
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
   test('the comment box never hides under the mode bar', async () => {
     const { dir, dispose } = await tempDir();
     try {

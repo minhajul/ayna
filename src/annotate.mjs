@@ -580,11 +580,51 @@ export async function runAnnotate({
       .catch(() => null);
 
   let appearance = null;
+
+  /** The page's measurable faults, counted per check in SEVERITY's order. */
+  const countFaults = async () => {
+    const { CHECKS, SEVERITY } = await import('./audit.mjs');
+    const measured = await page.evaluate(CHECKS);
+    const counts = {};
+    for (const [key] of SEVERITY) counts[key] = measured?.[key]?.length ?? 0;
+    const serious = SEVERITY.filter(([, sev]) => sev !== 'minor').reduce((n, [k]) => n + counts[k], 0);
+    return { counts, serious, unavailable: measured?.unavailable ?? null };
+  };
+
+  /*
+    What the page measured before anyone touched it.
+
+    The gate after a round reported every fault on the page as "still there",
+    which read as "your change did not work" when nearly all of them had been
+    there all along — the user's own home page showed 27 of them on a round that
+    only renamed a footer. Counting once when the round is sent lets the gate
+    say what the round added, and leave what it found alone.
+
+    Bounded, because this sits between pressing Send and Claude hearing about
+    it; a page too heavy to measure in a few seconds just goes uncompared.
+  */
+  let baseline = null;
+  const samePage = (a, b) => {
+    try {
+      const [x, y] = [new URL(a), new URL(b)];
+      return x.origin + x.pathname + x.hash === y.origin + y.pathname + y.hash;
+    } catch {
+      return false;
+    }
+  };
+
   // The user finished a round of comments and wants them acted on.
   await page.exposeFunction('__aynaDone', async () => {
     round += 1;
     phase = 'awaiting-claude';
     appearance = await appearanceOf();
+    baseline = null;
+    try {
+      const before = await Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      if (before && !before.unavailable) baseline = { url: page.url(), counts: before.counts };
+    } catch {
+      // Uncompared is still honest; the gate reports totals as it always has.
+    }
     watchProject();
     await writeManifest();
     await writeStatus();
@@ -1143,17 +1183,24 @@ export async function runAnnotate({
           reason to refuse them the choice.
         */
         try {
-          const { CHECKS: GATE, SEVERITY: RANK } = await import('./audit.mjs');
-          const measured = await measureApp(GATE);
-          const counts = {};
-          for (const [key] of RANK) counts[key] = measured?.[key]?.length ?? 0;
-          const serious = RANK.filter(([, sev]) => sev !== 'minor').reduce((n, [k]) => n + counts[k], 0);
+          const { counts, serious, unavailable } = await countFaults();
+          /*
+            `before` is the page when the round was sent and `added` is what is
+            new since, per check. Only when it is the same page: a user who
+            browsed elsewhere while waiting is looking at different faults, and
+            subtracting one page's count from another's is not a comparison.
+          */
+          const compared = !unavailable && baseline && samePage(baseline.url, page.url()) ? baseline.counts : null;
           emit({
             event: 'gate',
             round,
-            clean: !measured?.unavailable && serious === 0,
+            clean: !unavailable && serious === 0,
             counts,
-            unavailable: measured?.unavailable ?? null,
+            before: compared,
+            added: compared
+              ? Object.fromEntries(Object.entries(counts).map(([k, n]) => [k, Math.max(0, n - (compared[k] ?? 0))]))
+              : null,
+            unavailable,
           });
         } catch (err) {
           // A gate that cannot run says so. Reporting it as clean would be the

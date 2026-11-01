@@ -3288,6 +3288,37 @@
     return row;
   }
 
+  /*
+    What the check after a round found, against the page before it.
+
+    With a baseline the question is whether this round broke anything, and the
+    faults it found waiting are context, not a verdict on the work. Without one
+    — an older window, or the user browsed elsewhere meanwhile — it falls back
+    to the totals and says only that they are on the page.
+  */
+  function gateWords(e) {
+    if (e.unavailable) return { text: 'Could not check the page', detail: e.unavailable, tone: 'warn' };
+    const total = faultTotal(e.counts);
+    if (!e.before || !e.added) {
+      return total
+        ? { text: plural(total, 'fault') + ' on the page', detail: faultList(e.counts), tone: e.clean ? '' : 'warn' }
+        : { text: 'No layout faults', tone: 'good' };
+    }
+    const added = faultTotal(e.added);
+    const fixed = Object.entries(e.before).reduce((n, [k, was]) => n + Math.max(0, was - (e.counts?.[k] ?? 0)), 0);
+    const already = total - added;
+    const context = [already && `${already} already there`, fixed && `${fixed} fixed`].filter(Boolean).join(' · ');
+    if (added) {
+      return {
+        text: plural(added, 'new fault') + ' since this round',
+        detail: [faultList(e.added), context].filter(Boolean).join(' · '),
+        tone: 'warn',
+      };
+    }
+    if (!total) return { text: fixed ? 'No layout faults left' : 'No layout faults', detail: context, tone: 'good' };
+    return { text: 'No new faults', detail: context, tone: 'good' };
+  }
+
   const roundCard = (round) => [...cards].reverse().find((c) => c.round === round) ?? cards.at(-1) ?? null;
 
   /** Draw one event. Returns false for anything the rail does not show. */
@@ -3360,13 +3391,7 @@
     if (e.event === 'gate') {
       const card = roundCard(e.round);
       if (!card) return false;
-      const total = faultTotal(e.counts);
-      const said = e.unavailable
-        ? { text: 'Could not check the page', detail: e.unavailable, tone: 'warn' }
-        : total
-          ? { text: plural(total, 'fault') + ' on the page', detail: faultList(e.counts), tone: e.clean ? '' : 'warn' }
-          : { text: 'No layout faults', tone: 'good' };
-      addToCard(card, item({ who: 'ayna', lane: 'ayna', at: e.at, ...said }));
+      addToCard(card, item({ who: 'ayna', lane: 'ayna', at: e.at, ...gateWords(e) }));
       return true;
     }
 
