@@ -642,40 +642,58 @@ export async function runAnnotate({
     }
   };
 
+  /*
+    True from Send until the round is announced.
+
+    The page says "waiting" the moment Send is pressed, but the measuring and
+    the copy of the project take seconds after that. Nothing can have landed
+    for a round nobody has heard of yet, so the loop leaves "Changes are in"
+    and the marker alone until then; otherwise "applied" could go out before
+    "round", with no files and a watcher left running.
+  */
+  let opening = false;
+
   // The user finished a round of comments and wants them acted on.
   await page.exposeFunction('__aynaDone', async () => {
     round += 1;
     phase = 'awaiting-claude';
-    appearance = await appearanceOf();
-    baseline = null;
+    opening = true;
     try {
-      const before = await Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]);
-      if (before && !before.unavailable) baseline = { url: page.url(), counts: before.counts };
-    } catch {
+      // A marker left from an earlier round is not news about this one.
+      await rm(appliedFile, { force: true });
+      appearance = await appearanceOf();
+      baseline = null;
+      roundNotes.set(round, comments.filter((c) => c.status !== 'approved').map((c) => c.id));
+      // Read before anyone edits, and before Claude hears there is anything to do.
+      roundEdits.clear();
+      const [before, snapshot] = await Promise.all([
+        Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]).catch(() => null),
+        projectDir
+          ? snapshotProject(projectDir, { skipDirs: SKIP_DIRS, textExt: TEXT_EXT }).catch(() => null)
+          : null,
+      ]);
       // Uncompared is still honest; the gate reports totals as it always has.
+      if (before && !before.unavailable) baseline = { url: page.url(), counts: before.counts };
+      roundSnapshot = snapshot;
+      watchProject();
+      await writeManifest();
+      await writeStatus();
+      emit({
+        event: 'round',
+        round,
+        comments: comments.length,
+        open: comments.filter((c) => c.status !== 'approved').length,
+        // Which notes this round carries, including ones from earlier windows, so
+        // the round is not called approved while any of them is still unjudged.
+        notes: comments
+          .filter((c) => c.status !== 'approved' && c.taskId)
+          .map((c) => ({ taskId: c.taskId, comment: c.comment })),
+        commentsFile,
+        action: 'read-comments',
+      });
+    } finally {
+      opening = false;
     }
-    roundNotes.set(round, comments.filter((c) => c.status !== 'approved').map((c) => c.id));
-    // Read before anyone edits, and before Claude hears there is anything to do.
-    roundEdits.clear();
-    roundSnapshot = projectDir
-      ? await snapshotProject(projectDir, { skipDirs: SKIP_DIRS, textExt: TEXT_EXT }).catch(() => null)
-      : null;
-    watchProject();
-    await writeManifest();
-    await writeStatus();
-    emit({
-      event: 'round',
-      round,
-      comments: comments.length,
-      open: comments.filter((c) => c.status !== 'approved').length,
-      // Which notes this round carries, including ones from earlier windows, so
-      // the round is not called approved while any of them is still unjudged.
-      notes: comments
-        .filter((c) => c.status !== 'approved' && c.taskId)
-        .map((c) => ({ taskId: c.taskId, comment: c.comment })),
-      commentsFile,
-      action: 'read-comments',
-    });
   });
 
   /*
@@ -794,8 +812,12 @@ export async function runAnnotate({
   });
 
   // One file's diff from one round, as lines for the panel. See rounds.mjs.
-  await page.exposeFunction('__aynaDiff', async (forRound, file) => {
-    const change = roundFiles.get(Number(forRound))?.find((c) => c.file === file);
+  // Asked for by the round's key, like undo, so an earlier process's card
+  // cannot be shown this process's round of the same number.
+  await page.exposeFunction('__aynaDiff', async (key, file) => {
+    const [owner, number] = String(key).split('.');
+    if (owner !== windowKey) return null;
+    const change = roundFiles.get(Number(number))?.find((c) => c.file === file);
     return change?.ops ? hunks(change.ops) : null;
   });
 
@@ -806,17 +828,24 @@ export async function runAnnotate({
     a note left open last time is still owed, and it is what the user most
     needs to know about the past. So the panel says how many windows came
     before and how much they left open, and the Tasks list has the detail.
+
+    "Before" is when this process attached, not when its tab was first opened:
+    a resumed session reuses an old tab, and measuring from that tab's birth
+    lost every window opened in between. This tab's own earlier notes are left
+    out, because its activity already replays them.
   */
+  const attachedAt = Date.now();
   await page.exposeFunction('__aynaEarlier', async () => {
     if (!store?.db || !tabId) return { windows: 0, open: 0 };
     try {
-      const mine = store.db.prepare('SELECT opened_at FROM tabs WHERE id = ?').get(tabId)?.opened_at ?? Date.now();
       const { windows } = store.db
         .prepare('SELECT COUNT(*) AS windows FROM tabs WHERE id <> ? AND opened_at < ?')
-        .get(tabId, mine);
+        .get(tabId, attachedAt);
       const { isPending } = await import('./tasks.mjs');
-      // Raised before this window opened, by any window or none, and not yet settled.
-      const open = (await store.list()).filter((t) => isPending(t) && Date.parse(t.createdAt) < mine).length;
+      // Raised before this window, by any other window or none, and not yet settled.
+      const open = (await store.list()).filter(
+        (t) => isPending(t) && t.tabId !== tabId && Date.parse(t.createdAt) < attachedAt,
+      ).length;
       return { windows, open };
     } catch {
       return { windows: 0, open: 0 };
@@ -1224,7 +1253,7 @@ export async function runAnnotate({
     // shows a half-finished screen and calls it the result.
     const editsSettled = editedAt > 0 && Date.now() - editedAt > 1800;
 
-    if (phase === 'awaiting-claude' && (existsSync(appliedFile) || editsSettled || saidApplied)) {
+    if (phase === 'awaiting-claude' && !opening && (existsSync(appliedFile) || editsSettled || saidApplied)) {
       const reason = existsSync(appliedFile) ? 'marker' : saidApplied ? 'user' : 'file-change';
       saidApplied = false;
       stopWatchingProject();

@@ -3710,7 +3710,7 @@
     name alone says nothing about which. The diff is fetched when asked for,
     because most rounds are judged by looking at the page, not the source.
   */
-  function fileList(round, files) {
+  function fileList(key, files) {
     const list = document.createElement('div');
     list.className = NS + '-files';
     for (const f of files) {
@@ -3732,7 +3732,7 @@
           row.nextElementSibling.remove();
           return;
         }
-        const lines = await window.__aynaDiff?.(round, f.file).catch(() => null);
+        const lines = await window.__aynaDiff?.(key, f.file).catch(() => null);
         const pre = document.createElement('div');
         pre.className = NS + '-diff';
         for (const l of lines ?? [{ t: '…', s: 'no diff to show' }]) {
@@ -3910,7 +3910,7 @@
         who: 'Claude', lane: 'claude', at: e.at, detail: how,
         text: files.length ? 'Finished · ' + plural(files.length, 'file') : 'Finished',
       }));
-      if (files.length) row.appendChild(fileList(e.round, files));
+      if (files.length) row.appendChild(fileList(e.key, files));
       card.files = files;
       card.key = e.key;
       setCard(card, 'ready');
