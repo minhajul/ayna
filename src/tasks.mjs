@@ -190,7 +190,10 @@ export async function openStore(projectDir, { db: given } = {}) {
       }
       db.prepare(`INSERT INTO tasks (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`).run(...values);
       db.prepare('INSERT INTO task_history (task_id, at, status) VALUES (?, ?, ?)').run(next, now, status);
-      appendEvent(db, { event: 'task', taskId: next, status, comment: cols.comment ?? null, url: cols.url ?? null });
+      appendEvent(db, {
+        event: 'task', taskId: next, tabId: cols.tab_id ?? null,
+        status, comment: cols.comment ?? null, url: cols.url ?? null,
+      });
       return next;
     });
 
@@ -208,7 +211,12 @@ export async function openStore(projectDir, { db: given } = {}) {
     return read(id);
   }
 
-  async function update(id, patch, note) {
+  /*
+    `tabId` is the window the change was made in, which is not always the one the
+    task was raised in: a note carried over from yesterday's review is judged in
+    today's, and that verdict belongs in today's activity.
+  */
+  async function update(id, patch, note, { tabId = null } = {}) {
     const current = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     if (!current) return null;
 
@@ -227,7 +235,7 @@ export async function openStore(projectDir, { db: given } = {}) {
         db.prepare('INSERT INTO task_history (task_id, at, status, note) VALUES (?, ?, ?, ?)').run(
           id, now, patch.status, note ?? null,
         );
-        appendEvent(db, { event: 'task', taskId: id, status: patch.status, ...(note ? { note } : {}) });
+        appendEvent(db, { event: 'task', taskId: id, tabId, status: patch.status, ...(note ? { note } : {}) });
       }
     });
     return read(id);

@@ -393,6 +393,7 @@ export async function runAnnotate({
             twice.
           */
           legacyKey: `${path.basename(outDir)}#${record.id}`,
+          tabId,
           url: record.url,
           kind: record.kind,
           comment: record.comment,
@@ -511,12 +512,17 @@ export async function runAnnotate({
 
     Task changes are the exception: the store already logs them as it makes them,
     and writing them twice would say everything twice.
+
+    Every row carries this window's tab. Untagged, a round from last week's
+    review and a round from this one were indistinguishable, so a new window
+    could only replay the project's whole history — "Window closed" at the top,
+    and "round 1" twice.
   */
   const emit = (e) => {
     pushFeed(e);
     if (store?.db && e.event !== 'task') {
       import('./db.mjs')
-        .then(({ appendEvent }) => appendEvent(store.db, e))
+        .then(({ appendEvent }) => appendEvent(store.db, { ...e, tabId, sessionId }))
         .catch(() => {
           // The mirror and stdout still carry it; a log write must not take the
           // window down.
@@ -758,15 +764,15 @@ export async function runAnnotate({
       c.comment = note;
       c.status = 'open';
       c.source = 'user';
-      if (store && c.taskId) await store.update(c.taskId, { comment: note, status: 'open', source: 'user' }, 'redirected by the user');
+      if (store && c.taskId) await store.update(c.taskId, { comment: note, status: 'open', source: 'user' }, 'redirected by the user', { tabId });
       emit({ event: 'task', id: c.taskId ?? id, status: 'open', comment: note, action: 'do-this-instead' });
     } else if (verdict === 'approve') {
       c.status = 'open'; // approved to go ahead, not approved as done
-      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, 'user approved the proposal');
+      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, 'user approved the proposal', { tabId });
       emit({ event: 'task', id: c.taskId ?? id, status: 'open', comment: c.comment, action: 'go-ahead' });
     } else {
       c.status = 'approved'; // declined and settled; nothing to do
-      if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, 'user declined the proposal');
+      if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, 'user declined the proposal', { tabId });
     }
     await writeManifest();
     await writeStatus();
@@ -800,9 +806,19 @@ export async function runAnnotate({
     if (!c || !['approved', 'rejected', 'open'].includes(status)) {
       return { ok: false };
     }
+    /*
+      The same verdict twice is one verdict.
+
+      Pressing "Needs work" again on a note already sent back logged a second
+      rejection — two "Sent back" lines in the activity, two entries in the
+      comment's history, and a second retry request for the same attempt.
+    */
+    if (c.status === status) {
+      return { ok: true, status, open: comments.filter((x) => x.status !== 'approved').length };
+    }
     c.status = status;
     c.rounds.push({ round, status });
-    if (store && c.taskId) await store.update(c.taskId, { status });
+    if (store && c.taskId) await store.update(c.taskId, { status }, undefined, { tabId });
     await writeManifest();
     await writeStatus();
     if (status === 'rejected') {
@@ -835,7 +851,7 @@ export async function runAnnotate({
     for (const c of comments) {
       if (c.status !== 'approved') {
         c.status = 'approved';
-        if (store && c.taskId) await store.update(c.taskId, { status: 'approved' });
+        if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, undefined, { tabId });
         c.rounds.push({ round, status: 'approved', via: 'approve-all' });
         n += 1;
       }
@@ -1008,13 +1024,37 @@ export async function runAnnotate({
       saidApplied = false;
       stopWatchingProject();
       await rm(appliedFile, { force: true });
-      emit({ event: 'applied', round, via: reason });
+
+      /*
+        Do not reload a page that has already updated itself.
+
+        The reload exists to make a fix visible. An app with hot reloading has
+        shown it before ayna gets here, so the reload is pure loss: it throws
+        away everything the browser was holding — a canvas viewport, a zoom
+        level, an open diagram, unsaved edits — and none of that comes back from
+        a scroll position. Restoring scroll never helped anyone reviewing a
+        canvas, because their place was never scroll.
+
+        The signature is taken before the round is sent and compared now. Style
+        text and element count are what a UI fix changes and what animation and
+        incoming data do not, so a difference means the page moved on its own.
+
+        Decided before announcing, so the announcement can say which happened.
+        It used to go out twice for a hot-reloaded page — once before the check
+        and again with `reloaded: false` — and every reader saw it land twice.
+      */
+      const signature = await appearanceOf();
+      const changedItself =
+        appearance && signature && appearance.rules === signature.rules
+          ? false
+          : Boolean(appearance && signature);
+      emit({ event: 'applied', round, via: reason, reloaded: !changedItself });
+
       // Anything the user sent back for another attempt has now had one, so it
       // returns to the pile to be judged again rather than staying "rejected".
       for (const c of comments) {
         if (c.status === 'rejected') c.status = 'open';
       }
-      const signature = await appearanceOf();
       try {
         /*
           Come back to where they were standing.
@@ -1026,28 +1066,7 @@ export async function runAnnotate({
         */
         const at = await page.evaluate(() => ({ x: scrollX, y: scrollY })).catch(() => null);
 
-        /*
-          Do not reload a page that has already updated itself.
-
-          The reload exists to make a fix visible. An app with hot reloading has
-          shown it before ayna gets here, so the reload is pure loss: it throws
-          away everything the browser was holding — a canvas viewport, a zoom
-          level, an open diagram, unsaved edits — and none of that comes back from
-          a scroll position. Restoring scroll never helped anyone reviewing a
-          canvas, because their place was never scroll.
-
-          The signature is taken before the round is sent and compared now. Style
-          text and element count are what a UI fix changes and what animation and
-          incoming data do not, so a difference means the page moved on its own.
-        */
-        const changedItself =
-          appearance && signature && appearance.rules === signature.rules
-            ? false
-            : Boolean(appearance && signature);
-
-        if (changedItself) {
-          emit({ event: 'applied', round, via: reason, reloaded: false });
-        } else {
+        if (!changedItself) {
           await reloadSettled(page);
           if (at && (at.x || at.y)) {
             await page.evaluate((p) => scrollTo(p.x, p.y), at).catch(() => {});

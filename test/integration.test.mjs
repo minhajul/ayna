@@ -1916,6 +1916,75 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
+  test('each thing is announced once, and filed under the window it happened in', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const { openStore } = await import('../src/tasks.mjs');
+      const { eventsSince } = await import('../src/db.mjs');
+      const site = path.join(dir, 'site');
+      await fixtureSite(site);
+      const out = path.join(dir, 'out');
+      const server = await serveStatic(site, 4742);
+      const store = await openStore(dir);
+      const events = [];
+      try {
+        await runAnnotate({
+          browser,
+          store,
+          url: server.url,
+          outDir: out,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onEvent: (e) => events.push(e),
+          onReady: async (page) => {
+            await page.click('.title');
+            await page.waitForSelector('.ayna-ov-pop textarea');
+            await page.fill('.ayna-ov-pop textarea', 'tighten this');
+            await page.click('.ayna-ov-save');
+            await page.waitForTimeout(400);
+            await page.click('[data-act=send]');
+            await page.waitForTimeout(500);
+
+            // A dev server's hot reload: the page restyles itself before ayna looks.
+            await page.evaluate(() => {
+              const s = document.createElement('style');
+              s.textContent = '.title { letter-spacing: -0.02em }';
+              document.head.append(s);
+            });
+            await writeFile(path.join(out, 'applied'), '1');
+            await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, {
+              timeout: 20000,
+            });
+            await page.waitForTimeout(400);
+
+            // "Needs work", then "Needs work" again on the same note.
+            await page.evaluate(() => window.__aynaResolve(1, 'rejected'));
+            await page.evaluate(() => window.__aynaResolve(1, 'rejected'));
+            await page.waitForTimeout(300);
+            await page.close();
+          },
+        });
+
+        const applied = events.filter((e) => e.event === 'applied');
+        assert.equal(applied.length, 1, 'a hot-reloaded page was announced as applied twice');
+        assert.equal(applied[0].reloaded, false, 'and the one announcement says it was not reloaded');
+        assert.equal(events.filter((e) => e.event === 'rejected').length, 1, 'the same verdict twice is one verdict');
+
+        const logged = eventsSince(store.db);
+        const tab = logged.find((e) => e.event === 'tab-opened').tabId;
+        for (const kind of ['task', 'round', 'applied', 'gate', 'rejected', 'closed']) {
+          const rows = logged.filter((e) => e.event === kind);
+          assert.ok(rows.length, `${kind} reached the log`);
+          assert.ok(rows.every((e) => e.tabId === tab), `${kind} is filed under this window`);
+        }
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
   test('the comment box never hides under the mode bar', async () => {
     const { dir, dispose } = await tempDir();
     try {
