@@ -19,11 +19,14 @@
     the name; written with the drawer's current state, because each phase
     rebuilds the bar's markup.
   */
+  // A window with its side column: the rail. One mark for it everywhere — the
+  // bar's Activity button on a narrow window, the rail's own fold on a wide one.
+  const RAIL_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
   const brand = () =>
     '<button data-act="activity" class="' + NS + '-ghost" aria-label="Activity" aria-expanded="' +
-    String(drawerOpen) + '">' +
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' +
+    String(drawerOpen) + '">' + RAIL_ICON +
     '<span class="' + NS + '-activity-dot"></span></button>' +
     '<span class="' + NS + '-brand">ayna</span>';
   // The Tasks button's face: an icon that stays, and a word that gives way when
@@ -249,7 +252,7 @@
     .${NS}-console.${NS}-min .${NS}-agents { display: none; }
     .${NS}-console.${NS}-min .${NS}-console-head { padding: 8px 4px; justify-content: center; }
     .${NS}-console.${NS}-min .${NS}-console-head .${NS}-spacer { display: none; }
-    .${NS}-console.${NS}-min .${NS}-console-head button { padding: 2px 6px; font-size: 14px; }
+    .${NS}-console.${NS}-min .${NS}-console-head [data-act=fold] { width: 26px; height: 26px; }
     /* The edge you drag to make it wider. Double-click puts it back. */
     .${NS}-grip {
       position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; z-index: 1;
@@ -300,6 +303,8 @@
         box-shadow: 12px 0 32px rgba(0,0,0,.45);
       }
       .${NS}-console .${NS}-grip { display: none; }
+      /* The drawer has nothing to fold into; the bar's Activity button, a tap beside it or Escape closes it. */
+      .${NS}-console .${NS}-console-head [data-act=fold] { display: none; }
       .${NS}-bar [data-act=activity] { display: inline-flex; }
       .${NS}-bar .${NS}-brand { display: none; }
       .${NS}-scrim.${NS}-open { display: block; top: var(--ayna-bar-h, 52px); }
@@ -331,6 +336,11 @@
     }
     .${NS}-console-head button:hover { background: var(--ayna-line, rgba(255,255,255,.075)); color: var(--ayna-text, #f4f2ef); }
     .${NS}-console-head .${NS}-spacer { margin-left: auto; }
+    /* The fold is the Activity icon, not a word: square, with the hover of every head button. */
+    .${NS}-console-head [data-act=fold] {
+      width: 28px; height: 28px; padding: 0; display: grid; place-items: center; flex: none;
+    }
+    .${NS}-console-head [data-act=fold] svg { width: 16px; height: 16px; }
     .${NS}-agents { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; }
     .${NS}-agents:empty { display: none; }
     .${NS}-agent {
@@ -4062,10 +4072,12 @@
     consoleMin = min;
     if (!consoleEl) return;
     consoleEl.classList.toggle(NS + '-min', min);
-    // A spine is 34px; a glyph fits it, the word "Show" was clipped to "Sho".
+    // The icon is the same either way; which way it goes is in its label.
     const fold = consoleEl.querySelector('[data-act=fold]');
-    fold.textContent = min ? '»' : 'Hide';
-    fold.title = min ? 'Show activity' : 'Hide activity';
+    const label = min ? 'Show activity' : 'Hide activity';
+    fold.title = label;
+    fold.setAttribute('aria-label', label);
+    fold.setAttribute('aria-expanded', String(!min));
     try {
       sessionStorage.setItem('ayna-console', min ? 'min' : 'open');
     } catch {
@@ -4221,7 +4233,8 @@
         '<span class="' + NS + '-dotlive"></span><span class="' + NS + '-console-title">Activity</span>' +
         '<span class="' + NS + '-agents"></span>' +
         '<span class="' + NS + '-spacer"></span>' +
-        '<button data-act="fold">Hide</button>' +
+        '<button data-act="fold" title="Hide activity" aria-label="Hide activity" aria-expanded="true">' +
+          RAIL_ICON + '</button>' +
       '</div>' +
       '<div class="' + NS + '-earlier" hidden><span></span><button data-act="earlier">Show</button></div>' +
       /*
@@ -4262,9 +4275,7 @@
     document.documentElement.appendChild(consoleEl);
     setRailTint();
 
-    consoleEl.querySelector('[data-act=fold]').addEventListener('click', () =>
-      isNarrow() ? setDrawer(false) : setConsoleMinimised(!consoleMin),
-    );
+    consoleEl.querySelector('[data-act=fold]').addEventListener('click', () => setConsoleMinimised(!consoleMin));
     buildDrawer();
     consoleEl.querySelector('[data-act=earlier]').addEventListener('click', () => togglePanel());
 

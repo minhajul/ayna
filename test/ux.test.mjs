@@ -836,16 +836,27 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       rather than being covered.
     */
     const seen = {};
+    const fold = (page) =>
+      page.evaluate(() => {
+        const b = document.querySelector('[data-act=fold]');
+        return `${b.getAttribute('aria-label')}|${b.textContent.trim()}|${Boolean(b.querySelector('svg'))}`;
+      });
     await withConsole(async (page) => {
       seen.open = await overlap(page);
+      seen.foldOpen = await fold(page);
       await page.click('[data-act=fold]');
       await page.waitForTimeout(800);
       seen.minimised = await overlap(page);
+      seen.foldMin = await fold(page);
       await page.click('[data-act=fold]');
       await page.waitForTimeout(800);
       seen.reopened = await overlap(page);
     });
-    assert.deepEqual(seen, { open: 0, minimised: 0, reopened: 0 });
+    // The fold is the Activity icon in both states, with which way it goes in its label.
+    assert.deepEqual(seen, {
+      open: 0, minimised: 0, reopened: 0,
+      foldOpen: 'Hide activity||true', foldMin: 'Show activity||true',
+    });
   });
 
   test('typing in it does not reach the page underneath', async () => {
@@ -1288,6 +1299,7 @@ describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' 
             const marker = document.querySelector('.ayna-ov-revbar')?.getBoundingClientRect();
             const onTop = marker && document.elementFromPoint(marker.x + marker.width / 2, marker.y + marker.height / 2);
             return {
+              fold: getComputedStyle(document.querySelector('.ayna-ov-console [data-act=fold]')).display,
               left: Math.round(r.left),
               top: Math.round(r.top - bar.bottom),
               width: Math.round(r.width),
@@ -1323,6 +1335,7 @@ describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' 
     assert.deepEqual([seen.sheet.left, seen.sheet.top, seen.sheet.bottom], [0, 0, 0], 'a drawer from the left, under the bar');
     assert.equal(seen.sheet.width, Math.round(390 * 0.86));
     assert.equal(seen.sheet.rounds, 1);
+    assert.equal(seen.sheet.fold, 'none', 'the drawer has no Hide: it closes from the bar, a tap beside it or Escape');
     assert.notEqual(seen.sheet.markerCovered, false, 'a review marker shows through the backdrop');
     assert.equal(seen.closed, 'none', 'tapping the backdrop closes the sheet');
     assert.deepEqual([seen.menuOutside, seen.menuEscape], [false, false], 'the ⋯ menu closes on a press elsewhere and on Escape');
