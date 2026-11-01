@@ -629,6 +629,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
   test('a round is one card that says whose move it is', async () => {
     const seen = [];
     let brand = null;
+    let head = null;
     await withConsole(async (page, dir) => {
       const card = () =>
         page.evaluate(() => {
@@ -655,6 +656,15 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await page.click('[data-act=send]');
       await page.waitForTimeout(1300);
       seen.push(await card());
+      // With "claude working" showing, the fold stays on the title's line; the chips wrap below.
+      await page.waitForSelector('.ayna-ov-agent', { timeout: 5000 });
+      head = await page.evaluate(() => {
+        const mid = (s) => {
+          const r = document.querySelector(s).getBoundingClientRect();
+          return Math.round(r.top + r.height / 2);
+        };
+        return { fold: mid('.ayna-ov-console [data-act=fold]') === mid('.ayna-ov-console-title'), chipBelow: mid('.ayna-ov-agent') > mid('.ayna-ov-console-title') };
+      });
 
       await writeFile(path.join(dir, 'out', 'applied'), '1');
       await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
@@ -668,6 +678,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
 
     const [drafting, sent, landed, judged] = seen;
     assert.equal(brand, 'Ayna', 'the bar shows the name capitalised');
+    assert.deepEqual(head, { fold: true, chipBelow: true });
     // The note sits under its round from the start, not above a header drawn later.
     assert.deepEqual(drafting, { title: 'Next round', pill: 'Not sent yet', lines: ['You: make it bigger'], cards: 1 });
     assert.equal(sent.title, 'Round 1');

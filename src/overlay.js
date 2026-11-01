@@ -350,7 +350,12 @@
       width: 28px; height: 28px; padding: 0; display: grid; place-items: center; flex: none;
     }
     .${NS}-console-head [data-act=fold] svg { width: 16px; height: 16px; }
-    .${NS}-agents { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; }
+    /*
+      Who is working takes a row of its own, under the title rather than
+      between it and the fold. Sitting in source order before the fold, a full
+      row of chips pushed the fold onto a third line by itself.
+    */
+    .${NS}-agents { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; order: 1; }
     .${NS}-agents:empty { display: none; }
     .${NS}-agent {
       display: inline-flex; align-items: center; gap: 6px;
