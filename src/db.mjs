@@ -266,12 +266,16 @@ export function eventsSince(db, seq = 0, limit = 500) {
  * `closed` is the one untagged event that always belongs to some other window:
  * logs written before events were tagged end each review with one.
  */
-const floors = new WeakMap();
-
 export function windowEventsSince(db, tabId, seq = 0, limit = 500) {
+  /*
+    `+tab_id` keeps this off the events_tab index on purpose. Read through the
+    primary key, the rows arrive in seq order and the query stops at `limit`;
+    through the index, SQLite gathers every match after the cursor, sorts it,
+    and only then cuts — several times slower once a resumed tab has history.
+  */
   return db
     .prepare(
-      "SELECT * FROM events WHERE seq > ? AND (tab_id = ? OR (tab_id IS NULL AND event <> 'closed')) " +
+      "SELECT * FROM events WHERE seq > ? AND (+tab_id = ? OR (+tab_id IS NULL AND event <> 'closed')) " +
         'ORDER BY seq ASC LIMIT ?',
     )
     .all(Math.max(Number(seq) || 0, windowFloor(db, tabId)), tabId, limit)
@@ -281,22 +285,18 @@ export function windowEventsSince(db, tabId, seq = 0, limit = 500) {
 /*
   Where a window's story starts: after the last event of the window before it.
 
-  The rail asks every second, and once the window has an event of its own the
-  answer can never change — later events only come after it. So it is worked
-  out once per window, by index, instead of with two table scans per poll.
+  The rail asks every second, so both halves are index seeks rather than table
+  scans: the window's first event through events_tab, and the event before it
+  by walking back down the primary key to the first one from another window.
 */
 function windowFloor(db, tabId) {
-  const known = floors.get(db)?.get(tabId);
-  if (known !== undefined) return known;
   const first = db.prepare('SELECT MIN(seq) AS seq FROM events WHERE tab_id = ?').get(tabId)?.seq ?? null;
   if (first === null) return 0;
-  const floor =
+  return (
     db
       .prepare('SELECT seq FROM events WHERE seq < ? AND tab_id IS NOT NULL AND tab_id <> ? ORDER BY seq DESC LIMIT 1')
-      .get(first, tabId)?.seq ?? 0;
-  if (!floors.has(db)) floors.set(db, new Map());
-  floors.get(db).set(tabId, floor);
-  return floor;
+      .get(first, tabId)?.seq ?? 0
+  );
 }
 
 export const latestSeq = (db) => db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events').get().seq;
