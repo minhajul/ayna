@@ -212,6 +212,9 @@ export async function runAnnotate({
     closing the window no longer loses it.
   */
   store = null,
+  // Who opened the window. Worked out from the environment when not given;
+  // tests pass one, since they run inside an agent themselves.
+  agent: givenAgent = null,
 }) {
   await mkdir(outDir, { recursive: true });
 
@@ -228,6 +231,7 @@ export async function runAnnotate({
   let tabId = null;
   let sessions = null;
   let beat = null;
+  let opener = null;
   if (store?.db) {
     try {
       const { openSessions } = await import('./sessions.mjs');
@@ -242,7 +246,8 @@ export async function runAnnotate({
         tabs — and `ayna status` could not answer "which window is mine?" because
         every command had made a new one.
       */
-      const agent = identify();
+      const agent = givenAgent ?? identify();
+      opener = agent;
       sessionId = sessions.resume({ agent, project: projectDir }).id;
       tabId = sessions.tabFor({ sessionId, url, outDir }).id;
       beat = setInterval(() => {
@@ -435,6 +440,9 @@ export async function runAnnotate({
   let round = 0;
   const statusFile = path.join(outDir, 'status.json');
   const appliedFile = path.join(outDir, 'applied');
+  // Written by `ayna comments` when it reads a round that is waiting.
+  const pickedUpFile = path.join(outDir, 'picked-up');
+  let pickedUp = false;
   const commentsFile = path.join(outDir, 'comments.json');
   const auditRequest = path.join(outDir, 'audit-request');
   const auditResult = path.join(outDir, 'audit-live.json');
@@ -578,6 +586,8 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaDone', async () => {
     round += 1;
     phase = 'awaiting-claude';
+    pickedUp = false;
+    await rm(pickedUpFile, { force: true });
     appearance = await appearanceOf();
     watchProject();
     await writeManifest();
@@ -635,6 +645,33 @@ export async function runAnnotate({
     while you are looking at the page it belongs to, and the alternative to
     showing that is two of you doing the same job.
   */
+  /*
+    Who will hear a round, as far as anything can show it.
+
+    "Waiting for Claude" was said to every round, and "Claude working" shown
+    with it, whether or not any Claude was there: a window started from a plain
+    terminal waited for minutes on a round nothing would ever read. An agent is
+    attached in one of three ways, and each leaves a trace — it opened this
+    window and reads what it prints; it is following the window with `ayna
+    wait` or `ayna applied`, which keep a heartbeat; or it has read the round's
+    notes. Counting only one of them would cry wolf at the other two.
+
+    'unknown' without a database: there is nowhere for a heartbeat to be.
+  */
+  const listenerOf = () => {
+    if (pickedUp) return 'picked-up';
+    if (opener && opener.how !== 'none') return 'opener';
+    if (!store?.db) return 'unknown';
+    try {
+      const at = store.db.prepare("SELECT MAX(seen_at) AS at FROM cursors WHERE consumer LIKE 'listen:%'").get()?.at;
+      if (at && Date.now() - at < 10_000) return 'following';
+    } catch {
+      return 'unknown';
+    }
+    return 'none';
+  };
+  await page.exposeFunction('__aynaListening', async () => (phase === 'awaiting-claude' ? listenerOf() : null));
+
   await page.exposeFunction('__aynaAgents', async () => {
     if (!store) return [];
     const now = Date.now();
@@ -645,10 +682,12 @@ export async function runAnnotate({
       if (!busy.has(t.claimedBy)) busy.set(t.claimedBy, { agent: t.claimedBy, tasks: [] });
       busy.get(t.claimedBy).tasks.push({ id: t.id, comment: t.comment, status: t.status });
     }
-    // Claude is here whenever a round is owed, whether or not it claimed a row.
-    if (phase === 'awaiting-claude') {
+    // Claude is shown only when something says it is there: see listenerOf.
+    const heard = phase === 'awaiting-claude' ? listenerOf() : null;
+    if (heard && heard !== 'none' && heard !== 'unknown') {
       const mine = busy.get('claude') ?? { agent: 'claude', tasks: [] };
-      mine.working = true;
+      mine.working = heard === 'picked-up';
+      mine.listening = heard !== 'picked-up';
       busy.set('claude', mine);
     }
     return [...busy.values()];
@@ -1002,6 +1041,14 @@ export async function runAnnotate({
     // Edits have to stop arriving before the page reloads, or a save mid-edit
     // shows a half-finished screen and calls it the result.
     const editsSettled = editedAt > 0 && Date.now() - editedAt > 1800;
+
+    if (phase === 'awaiting-claude' && existsSync(pickedUpFile)) {
+      await rm(pickedUpFile, { force: true });
+      if (!pickedUp) {
+        pickedUp = true;
+        emit({ event: 'picked-up', round });
+      }
+    }
 
     if (phase === 'awaiting-claude' && (existsSync(appliedFile) || editsSettled || saidApplied)) {
       const reason = existsSync(appliedFile) ? 'marker' : saidApplied ? 'user' : 'file-change';
