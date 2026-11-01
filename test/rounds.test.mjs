@@ -115,6 +115,7 @@ describe('what a round changed', () => {
       // A budget of one file: the snapshot stops early and says so.
       const snap = await snapshotProject(dir, { skipDirs: SKIP, textExt: TEXT, maxFiles: 1 });
       assert.equal(snap.complete, false);
+      assert.equal(snap.files.size, 1, 'what fitted in the budget is still copied, so it can still be undone');
       const unread = ['src/a.css', 'src/b.tsx', 'src/gone.js'].find((f) => !snap.files.has(f));
       await writeFile(path.join(dir, unread), 'changed\n');
 

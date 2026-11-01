@@ -40,6 +40,8 @@ export async function snapshotProject(root, { skipDirs = [], textExt = new Set()
   // run side by side instead of one at a time while Send waits on them.
   const found = [];
   const walk = async (dir) => {
+    // Over budget, the rest of the tree is not worth listing.
+    if (!complete) return;
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
@@ -64,8 +66,14 @@ export async function snapshotProject(root, { skipDirs = [], textExt = new Set()
   };
   await walk(root);
 
+  /*
+    A walk that hit the file cap has already said `complete = false`, and the
+    files it did find are still worth reading. Only running out of bytes stops
+    the reads.
+  */
   let bytes = 0;
-  for (let i = 0; i < found.length && complete; i += 32) {
+  let full = false;
+  for (let i = 0; i < found.length && !full; i += 32) {
     const batch = found.slice(i, i + 32);
     const bufs = await Promise.all(batch.map((full) => readFile(full).catch(() => null)));
     for (const [k, full] of batch.entries()) {
@@ -76,6 +84,7 @@ export async function snapshotProject(root, { skipDirs = [], textExt = new Set()
       }
       if (bytes + bufs[k].length > maxBytes) {
         complete = false;
+        full = true;
         break;
       }
       files.set(rel, bufs[k]);
@@ -181,7 +190,7 @@ const isText = (buf) => buf === null || !buf.subarray(0, 8000).includes(0);
  * change.
  */
 export async function roundChanges(snapshot, candidates) {
-  const unread = [...(snapshot.unread ?? [])];
+  const unread = [...snapshot.unread];
   const seen = (rel) => snapshot.complete && !unread.some((u) => rel === u || rel.startsWith(`${u}/`));
   const changes = [];
   for (const rel of [...new Set([...candidates].map(posix))].sort()) {
