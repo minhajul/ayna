@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { gotoSettled, reloadSettled } from './browser.mjs';
 import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs';
+import { SKIP_DIRS } from './skipdirs.mjs';
 
 /**
  * Point-and-comment review on the live page.
@@ -51,91 +52,68 @@ import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs'
   style to the live page for the length of the capture, so hiding every
   [data-ayna] blinked the bar, the rail and the open comment box out of the
   user's window on every note. A crop on screen marks just the pieces it
-  overlaps (see markInCrop); the full-page fallback, which flinches anyway,
-  still hides everything.
+  overlaps; the full-page fallback, which flinches anyway, still hides
+  everything. And none of ayna's chrome casts a shadow for the capture: the
+  selection's label sits right above the element, outside the crop, and its
+  shadow put a dark smudge along the top of every crop of a nav.
 */
 export const WITHOUT_CHROME = '[data-ayna] { visibility: hidden !important; }';
-const WITHOUT_MARKED =
-  '[data-ayna-crop] { visibility: hidden !important; } [data-ayna-near] { box-shadow: none !important; }';
-
-/*
-  Mark ayna's elements that overlap a viewport clip, and nothing else — plus
-  the ones just outside it, whose shadows reach in. The selection's label sits
-  right above the element, and its shadow put a dark smudge along the top of
-  every crop of a nav. Those keep their place and lose only the shadow, for the
-  length of the capture. 32px is further than any shadow ayna draws.
-*/
-async function markInCrop(page, clip) {
-  const marked = await page
-    .evaluate((c) => {
-      const reach = 32;
-      for (const el of document.querySelectorAll('[data-ayna-crop], [data-ayna-near]')) {
-        el.removeAttribute('data-ayna-crop');
-        el.removeAttribute('data-ayna-near');
-      }
-      for (const el of document.querySelectorAll('[data-ayna]')) {
-        const r = el.getBoundingClientRect();
-        if (!r.width || !r.height) continue;
-        const within = (m) => r.right > c.x - m && r.left < c.x + c.width + m && r.bottom > c.y - m && r.top < c.y + c.height + m;
-        if (within(0)) el.setAttribute('data-ayna-crop', '');
-        else if (within(reach)) el.setAttribute('data-ayna-near', '');
-      }
-      return true;
-    }, clip)
-    .catch(() => false);
-  return marked ? WITHOUT_MARKED : WITHOUT_CHROME;
-}
+const WITHOUT_MARKED = '[data-ayna-crop] { visibility: hidden !important; } [data-ayna] { box-shadow: none !important; }';
 
 export async function cropRegion(page, rect, pad) {
+  // One trip to the page: measure, work out the clip, and mark what it covers.
+  const onScreen = await page
+    .evaluate(
+      ([r, pad]) => {
+        // Judge visibility on the region itself, then clamp the padding to the
+        // edges. Testing the padded box instead rejects anything full-width —
+        // the padding alone puts it past the right edge — which is most of what
+        // people click, so the fast path would exist and never be taken.
+        const x = r.x - scrollX;
+        const y = r.y - scrollY;
+        if (x < 0 || y < 0 || x + r.width > innerWidth || y + r.height > innerHeight) return null;
+
+        // A region inside the app's own area is padded only up to that area's
+        // edge, so the bar and the rail beside it are never in the crop and
+        // never need hiding. One already under them keeps the viewport's edges.
+        const css = getComputedStyle(document.documentElement);
+        const inset = (name) => parseFloat(css.getPropertyValue(name)) || 0;
+        const app = {
+          left: inset('--ayna-inset-left'),
+          top: inset('--ayna-inset-top'),
+          right: innerWidth,
+          bottom: innerHeight - inset('--ayna-inset-bottom'),
+        };
+        const inApp = x >= app.left && y >= app.top && x + r.width <= app.right && y + r.height <= app.bottom;
+        const edge = inApp ? app : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+        const left = Math.max(edge.left, x - pad);
+        const top = Math.max(edge.top, y - pad);
+        const clip = {
+          x: left,
+          y: top,
+          width: Math.max(8, Math.min(edge.right, x + r.width + pad) - left),
+          height: Math.max(8, Math.min(edge.bottom, y + r.height + pad) - top),
+        };
+
+        for (const el of document.querySelectorAll('[data-ayna-crop]')) el.removeAttribute('data-ayna-crop');
+        for (const el of document.querySelectorAll('[data-ayna]')) {
+          const b = el.getBoundingClientRect();
+          const overlaps = b.right > clip.x && b.left < clip.x + clip.width && b.bottom > clip.y && b.top < clip.y + clip.height;
+          if (b.width && b.height && overlaps) el.setAttribute('data-ayna-crop', '');
+        }
+        return clip;
+      },
+      [rect, pad],
+    )
+    .catch(() => null);
+  if (onScreen) return { clip: onScreen, fullPage: false, style: WITHOUT_MARKED };
+
   const clip = {
     x: Math.max(0, rect.x - pad),
     y: Math.max(0, rect.y - pad),
     width: Math.max(8, rect.width + pad * 2),
     height: Math.max(8, rect.height + pad * 2),
   };
-
-  const view = await page
-    .evaluate(() => {
-      const css = getComputedStyle(document.documentElement);
-      const inset = (name) => parseFloat(css.getPropertyValue(name)) || 0;
-      // The rail's width is a clamp() of the window, and a custom property
-      // hands that back as text, so its edge is measured rather than parsed.
-      const rail = document.querySelector('.ayna-ov-console')?.getBoundingClientRect();
-      return {
-        x: scrollX, y: scrollY, w: innerWidth, h: innerHeight,
-        top: inset('--ayna-inset-top'),
-        left: rail && rail.width && rail.height ? Math.max(0, rail.right) : 0,
-        bottom: inset('--ayna-inset-bottom'),
-      };
-    })
-    .catch(() => null);
-
-  if (view) {
-    // Judge visibility on the region itself, then clamp the padding to the edges.
-    // Testing the padded box instead rejects anything full-width — the padding
-    // alone puts it past the right edge — which is most of what people click, so
-    // the fast path would exist and never be taken.
-    const x = rect.x - view.x;
-    const y = rect.y - view.y;
-    const visible = x >= 0 && y >= 0 && x + rect.width <= view.w && y + rect.height <= view.h;
-    if (visible) {
-      // A region inside the app's own area is padded only up to that area's
-      // edge, so the bar and the rail beside it are never in the crop and never
-      // need hiding. One already under them keeps the viewport's edges.
-      const app = { left: view.left, top: view.top, right: view.w, bottom: view.h - view.bottom };
-      const inApp = x >= app.left && y >= app.top && x + rect.width <= app.right && y + rect.height <= app.bottom;
-      const edge = inApp ? app : { left: 0, top: 0, right: view.w, bottom: view.h };
-      const left = Math.max(edge.left, x - pad);
-      const top = Math.max(edge.top, y - pad);
-      const onScreen = {
-        x: left,
-        y: top,
-        width: Math.max(8, Math.min(edge.right, x + rect.width + pad) - left),
-        height: Math.max(8, Math.min(edge.bottom, y + rect.height + pad) - top),
-      };
-      return { clip: onScreen, fullPage: false, style: await markInCrop(page, onScreen) };
-    }
-  }
   return { clip, fullPage: true, style: WITHOUT_CHROME };
 }
 
@@ -184,18 +162,6 @@ async function findInSource(projectDir, { id, classes, text }, pageUrl) {
   return rankByPage(hits, pageUrl);
 }
 
-/*
-  Build output is not source. A Next.js project answers a grep for a class name
-  from .next/server/... and .next/static/chunks/... long before it reaches the
-  component that produced it — so the file:line handed to Claude pointed at
-  generated code that is rewritten on every build. Same for dist, build, .nuxt
-  and friends.
-*/
-const SKIP_DIRS = [
-  'node_modules', '.git', '.ayna', '.next', '.nuxt', '.svelte-kit', '.output',
-  '.turbo', '.cache', '.parcel-cache', 'dist', 'build', 'out', 'coverage',
-  'vendor', '__pycache__', '.venv', 'venv', '.yarn', '.pnpm-store',
-];
 
 const GREP_EXCLUDES = SKIP_DIRS.map((d) => `--exclude-dir=${d}`);
 const TEXT_EXT = new Set([
@@ -583,6 +549,12 @@ export async function runAnnotate({
   const mirrorTask = (c, fields) => {
     if (mirrorOnly) pushFeed({ event: 'task', taskId: noteKey(c), tabId: null, ...fields });
   };
+  // A note's status, set everywhere it is kept: here, the store, and the mirror.
+  const setStatus = async (c, status, note) => {
+    c.status = status;
+    if (store && c.taskId) await store.update(c.taskId, { status }, note, { tabId });
+    mirrorTask(c, { status });
+  };
   /*
     One data path.
 
@@ -629,6 +601,11 @@ export async function runAnnotate({
   */
   const windowKey = Math.random().toString(36).slice(2, 8);
   const roundKey = (n) => `${windowKey}.${n}`;
+  // The round a key names, or null when it was some other process's round.
+  const roundOf = (key) => {
+    const [owner, n] = String(key).split('.');
+    return owner === windowKey ? Number(n) : null;
+  };
   let projectWatcher = null;
   const watchProject = () => {
     if (projectWatcher || !projectDir) return;
@@ -728,18 +705,21 @@ export async function runAnnotate({
     phase = 'awaiting-claude';
     opening = true;
     try {
-      // A marker left from an earlier round is not news about this one.
-      await rm(appliedFile, { force: true });
-      appearance = await appearanceOf();
       baseline = null;
       roundNotes.set(round, comments.filter((c) => c.status !== 'approved').map((c) => c.id));
       // Read before anyone edits, and before Claude hears there is anything to do.
       roundEdits.clear();
       const [before, snapshot] = await Promise.all([
-        Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]).catch(() => null),
+        // The page's two measurements share it, so they go one after the other.
+        (async () => {
+          appearance = await appearanceOf();
+          return Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+        })().catch(() => null),
         projectDir
           ? snapshotProject(projectDir, { skipDirs: SKIP_DIRS, textExt: TEXT_EXT }).catch(() => null)
           : null,
+        // A marker left from an earlier round is not news about this one.
+        rm(appliedFile, { force: true }),
       ]);
       // Uncompared is still honest; the gate reports totals as it always has.
       if (before && !before.unavailable) baseline = { url: page.url(), counts: before.counts };
@@ -833,9 +813,8 @@ export async function runAnnotate({
     Not while Claude is working: a round in flight is writing the same files.
   */
   await page.exposeFunction('__aynaUndo', async (key) => {
-    const [owner, number] = String(key).split('.');
-    if (owner !== windowKey) return { ok: false, reason: 'that round was in an earlier window' };
-    const n = Number(number);
+    const n = roundOf(key);
+    if (n === null) return { ok: false, reason: 'that round was in an earlier window' };
     const changes = roundFiles.get(n);
     if (!changes?.length) return { ok: false, reason: 'nothing to undo' };
     if (phase === 'awaiting-claude') return { ok: false, reason: `Claude is working on round ${round}` };
@@ -855,10 +834,8 @@ export async function runAnnotate({
     for (const id of roundNotes.get(n) ?? []) {
       const c = comments.find((x) => x.id === id);
       if (!c || c.status === 'open') continue;
-      c.status = 'open';
       c.rounds.push({ round: n, status: 'open', via: 'undo' });
-      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, `round ${n} undone`, { tabId });
-      mirrorTask(c, { status: 'open' });
+      await setStatus(c, 'open', `round ${n} undone`);
     }
     await writeManifest();
     await writeStatus();
@@ -885,9 +862,7 @@ export async function runAnnotate({
   // Asked for by the round's key, like undo, so an earlier process's card
   // cannot be shown this process's round of the same number.
   await page.exposeFunction('__aynaDiff', async (key, file) => {
-    const [owner, number] = String(key).split('.');
-    if (owner !== windowKey) return null;
-    const change = roundFiles.get(Number(number))?.find((c) => c.file === file);
+    const change = roundFiles.get(roundOf(key))?.find((c) => c.file === file);
     return change?.ops ? hunks(change.ops) : null;
   });
 
@@ -1107,10 +1082,8 @@ export async function runAnnotate({
     if (c.status === status) {
       return { ok: true, status, open: comments.filter((x) => x.status !== 'approved').length };
     }
-    c.status = status;
     c.rounds.push({ round, status });
-    if (store && c.taskId) await store.update(c.taskId, { status }, undefined, { tabId });
-    mirrorTask(c, { status });
+    await setStatus(c, status);
     await writeManifest();
     await writeStatus();
     if (status === 'rejected') {
@@ -1142,18 +1115,26 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaApprove', finish);
 
   /*
-    The close countdown, kept here as well as on the page.
+    The close countdown: a moment and a half the user can take back.
 
-    The page counts down a moment the user can take back, then calls
-    __aynaApprove. But that timer lives in the page, and a reload in the moment
-    — a dev server's full reload, the overlay itself being reloaded — threw it
-    away: the user had pressed Close, the window never closed, and a scripted
-    review waited on it forever. This copy finishes the job a second after the
-    page should have, and Stay open cancels both.
+    It is kept here, not in the page. A timer in the page died with any reload
+    in that moment — a dev server's full reload, the overlay reloading itself —
+    and the user had pressed Close but the window never closed; a scripted
+    review waited on it forever. The page only draws the countdown and says
+    when Stay open cancels it. The chrome comes off the page before the end,
+    bounded, because the page may be the one mid-reload.
   */
   await page.exposeFunction('__aynaClosing', async (on) => {
     clearTimeout(closingTimer);
-    closingTimer = on ? setTimeout(() => finish().catch(() => {}), 2500) : null;
+    closingTimer = on
+      ? setTimeout(async () => {
+          await Promise.race([
+            page.evaluate(() => window.__aynaCleanup?.()).catch(() => {}),
+            new Promise((r) => setTimeout(r, 1000)),
+          ]);
+          await finish().catch(() => {});
+        }, 1500)
+      : null;
   });
 
   // Approving everything is now a deliberate button of its own, never a side
@@ -1162,9 +1143,8 @@ export async function runAnnotate({
     let n = 0;
     for (const c of comments) {
       if (c.status !== 'approved') {
-        c.status = 'approved';
-        if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, undefined, { tabId });
         c.rounds.push({ round, status: 'approved', via: 'approve-all' });
+        await setStatus(c, 'approved');
         n += 1;
       }
     }
@@ -1493,7 +1473,7 @@ export async function runAnnotate({
     const overflows = await page
       .evaluate(() => document.documentElement.scrollHeight > innerHeight + 4)
       .catch(() => true);
-    await page.screenshot({ path: fullFile, fullPage: overflows }).catch(() => {});
+    await page.screenshot({ path: fullFile, fullPage: overflows, style: WITHOUT_CHROME }).catch(() => {});
     if (ownsContext) await context.close().catch(() => {});
   }
 

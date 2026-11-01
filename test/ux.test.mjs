@@ -550,8 +550,8 @@ describe('ending a review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, ()
       await page.waitForTimeout(400);
       midway = await page.evaluate(() => document.querySelector('.ayna-ov-hint')?.textContent);
       await page.click('[data-act=stay]');
-      // Past the page's countdown and Node's backstop both: Stay cancels each.
-      await page.waitForTimeout(3200);
+      // Past the 1.5s countdown, which Node holds: Stay has to cancel it there.
+      await page.waitForTimeout(2200);
       stillOpen = !page.isClosed();
     });
     assert.match(midway, /Closing the review/);
@@ -624,6 +624,38 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       return Math.max(0, Math.round(c.right - b.left));
     });
 
+  // One note on the page's heading.
+  const note = async (page, text) => {
+    await page.click('.t');
+    await page.waitForSelector('.ayna-ov-pop textarea');
+    await page.fill('.ayna-ov-pop textarea', text);
+    await page.click('.ayna-ov-save');
+    await page.waitForTimeout(400);
+  };
+
+  // Send what is noted, have it land, and approve it: round 1, settled.
+  const approvedRound = async (page, dir) => {
+    await page.click('[data-act=send]');
+    await page.waitForTimeout(600);
+    await writeFile(path.join(dir, 'out', 'applied'), '1');
+    await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+    await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+  };
+
+  // The newest round card, as someone reading it sees it.
+  const lastCard = (page) =>
+    page.evaluate(() => {
+      const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
+      return c && {
+        title: c.querySelector('.ayna-ov-round-head b').textContent,
+        pill: c.querySelector('.ayna-ov-pill').textContent,
+        lines: [...c.querySelectorAll('.ayna-ov-item')].map(
+          (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
+        ),
+        cards: document.querySelectorAll('.ayna-ov-round').length,
+      };
+    });
+
   test('carries both sides of the conversation', async () => {
     const lines = [];
     await withConsole(async (page, dir) => {
@@ -651,18 +683,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     let brand = null;
     let head = null;
     await withConsole(async (page, dir) => {
-      const card = () =>
-        page.evaluate(() => {
-          const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
-          return c && {
-            title: c.querySelector('.ayna-ov-round-head b').textContent,
-            pill: c.querySelector('.ayna-ov-pill').textContent,
-            lines: [...c.querySelectorAll('.ayna-ov-item')].map(
-              (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
-            ),
-            cards: document.querySelectorAll('.ayna-ov-round').length,
-          };
-        });
+      const card = () => lastCard(page);
 
       // innerText, not textContent: it is the name as drawn, after any CSS case change.
       brand = await page.evaluate(() => document.querySelector('.ayna-ov-brand').innerText);
@@ -717,26 +738,10 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     let judged = null;
     await withConsole(
       async (page, dir) => {
-        await page.click('.t');
-        await page.waitForSelector('.ayna-ov-pop textarea');
-        await page.fill('.ayna-ov-pop textarea', 'make it bigger');
-        await page.click('.ayna-ov-save');
-        await page.waitForTimeout(400);
-        await page.click('[data-act=send]');
-        await page.waitForTimeout(600);
-        await writeFile(path.join(dir, 'out', 'applied'), '1');
-        await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
-        await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+        await note(page, 'make it bigger');
+        await approvedRound(page, dir);
         await page.waitForTimeout(1300);
-        judged = await page.evaluate(() => {
-          const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
-          return {
-            pill: c.querySelector('.ayna-ov-pill').textContent,
-            lines: [...c.querySelectorAll('.ayna-ov-item')].map(
-              (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
-            ),
-          };
-        });
+        judged = await lastCard(page);
       },
       { store: false },
     );
@@ -747,19 +752,8 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
   test('a message is never folded away inside a round', async () => {
     let seen = null;
     await withConsole(async (page, dir) => {
-      const note = async (text) => {
-        await page.click('.t');
-        await page.waitForSelector('.ayna-ov-pop textarea');
-        await page.fill('.ayna-ov-pop textarea', text);
-        await page.click('.ayna-ov-save');
-        await page.waitForTimeout(400);
-      };
-      await note('make it bigger');
-      await page.click('[data-act=send]');
-      await page.waitForTimeout(600);
-      await writeFile(path.join(dir, 'out', 'applied'), '1');
-      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
-      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await note(page, 'make it bigger');
+      await approvedRound(page, dir);
       const { appendEvent, openDb } = await import('../src/db.mjs');
       appendEvent(await openDb(dir), { event: 'message', from: 'claude', text: 'tidied the spacing too' });
       await (await openStore(dir)).create({ status: 'proposed', kind: 'proposal', comment: 'try a darker blue', source: 'claude', url: null });
@@ -768,7 +762,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       // The next round begins, and the approved one folds by itself.
       await page.click('[data-act=more]');
       await page.waitForTimeout(400);
-      await note('and bolder');
+      await note(page, 'and bolder');
       await page.waitForTimeout(1300);
       seen = await page.evaluate(() => {
         const line = [...document.querySelectorAll('.ayna-ov-line')].find((n) => n.textContent.includes('tidied the spacing too'));
@@ -796,27 +790,16 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
             sum: c.querySelector('.ayna-ov-round-sum').textContent,
           })),
         );
-      const note = async (text) => {
-        await page.click('.t');
-        await page.waitForSelector('.ayna-ov-pop textarea');
-        await page.fill('.ayna-ov-pop textarea', text);
-        await page.click('.ayna-ov-save');
-        await page.waitForTimeout(400);
-      };
 
-      await note('make it bigger');
-      await page.click('[data-act=send]');
-      await page.waitForTimeout(600);
-      await writeFile(path.join(dir, 'out', 'applied'), '1');
-      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
-      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await note(page, 'make it bigger');
+      await approvedRound(page, dir);
       await page.waitForTimeout(1300);
       seen.judged = await rounds();
 
       // The next round begins: the approved one gets out of the way.
       await page.click('[data-act=more]');
       await page.waitForTimeout(400);
-      await note('and bolder');
+      await note(page, 'and bolder');
       await page.waitForTimeout(1300);
       seen.next = await rounds();
 

@@ -24,6 +24,8 @@
   // The name as people read it, in the bar and on the lines ayna signs. The
   // lane, the classes and the command stay lowercase; this is only what shows.
   const AYNA = 'Ayna';
+  // How each lane signs its lines.
+  const SPEAKER = { you: 'You', claude: 'Claude', ayna: AYNA };
   // The folded rail's width; the page is inset by the same amount.
   const SPINE = '48px';
   const RAIL_ICON =
@@ -120,7 +122,7 @@
       position: fixed; z-index: 2147483647; left: var(--ayna-inset-left, 0px); right: 0; top: 0;
       display: flex; align-items: center; gap: 16px;
       flex-wrap: wrap; justify-content: center;
-      min-height: 52px; box-sizing: border-box;
+      min-height: var(--ayna-bar-min, 52px); box-sizing: border-box;
       background: var(--ayna-bar, #0d0d0f); color: var(--ayna-text, #f4f2ef); padding: 8px 16px;
       border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
       font: 13px/1.4 -apple-system, system-ui, sans-serif;
@@ -283,7 +285,7 @@
       The status is a dot, not words: the bar already says "waiting" or
       "1 left to judge"; the dot only says the drawer has news.
     */
-    .${NS}-bar [data-act=activity] { display: none; position: relative; width: 36px; padding: 0; justify-content: center; }
+    .${NS}-bar [data-act=activity] { display: none; position: relative; width: var(--ayna-icon-tap, 36px); padding: 0; justify-content: center; }
     .${NS}-activity-dot {
       position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
       display: none; box-shadow: 0 0 0 2px var(--ayna-bar, #0d0d0f);
@@ -352,10 +354,10 @@
     .${NS}-console-head [data-act=fold] svg { width: 16px; height: 16px; }
     /*
       Who is working takes a row of its own, under the title rather than
-      between it and the fold. Sitting in source order before the fold, a full
-      row of chips pushed the fold onto a third line by itself.
+      between it and the fold. It comes after the fold in the markup; written
+      before it, a full row of chips pushed the fold onto a third line.
     */
-    .${NS}-agents { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; order: 1; }
+    .${NS}-agents { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1 1 100%; }
     .${NS}-agents:empty { display: none; }
     .${NS}-agent {
       display: inline-flex; align-items: center; gap: 6px;
@@ -512,7 +514,7 @@
       background: rgba(255,255,255,.025);
     }
     .${NS}-round-head {
-      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-height: var(--ayna-row-tap, 0);
       border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
       font: 600 12px/1.4 -apple-system, system-ui, sans-serif;
     }
@@ -685,7 +687,7 @@
       outline for everything that only opens or switches something.
     */
     .${NS}-bar button {
-      display: inline-flex; align-items: center; gap: 7px; height: 32px; box-sizing: border-box;
+      display: inline-flex; align-items: center; gap: 7px; height: var(--ayna-tap, 32px); box-sizing: border-box;
       font: inherit; font-weight: 600; border: 1px solid transparent; border-radius: 8px;
       padding: 0 14px; cursor: pointer; background: var(--ayna-accent, #de9446);
       color: var(--ayna-on-accent, #0a0a0a);
@@ -710,7 +712,8 @@
       for ayna's own accent — the selected mode had no visible label at all.
     */
     .${NS}-modes button {
-      position: relative; isolation: isolate; height: 34px; padding: 0 13px; gap: 6px;
+      position: relative; isolation: isolate; height: var(--ayna-mode-tap, 34px); min-width: var(--ayna-mode-min, 0);
+      padding: 0 13px; gap: 6px; justify-content: center;
       border: 0; border-radius: 0; background: transparent;
       color: var(--ayna-muted, rgba(255,255,255,.62)); font-weight: 600;
     }
@@ -1057,17 +1060,22 @@
     .${NS}-pin:hover b { display: none; }
     .${NS}-pin:hover i { display: inline; }
     /*
+      Registered so it computes to pixels. Its value is the rail's clamp() of
+      the window, and unregistered, getComputedStyle handed that back as text —
+      so a crop could not tell where the app's area begins.
+    */
+    @property --ayna-inset-left { syntax: '<length>'; inherits: true; initial-value: 0px; }
+    /*
       A finger, not a cursor: 44px targets, the size ayna itself flags anything
-      under on everyone else's page. Last in the sheet on purpose: these match
-      the base rules' specificity, so written above them they lost on source
-      order and a phone kept the 32px buttons.
+      under on everyone else's page. Set as tokens the base rules read, not as
+      rules of their own: written as overrides they tied with the base rules on
+      specificity and lost on source order, and a phone kept the 32px buttons.
     */
     @media (pointer: coarse) {
-      .${NS}-bar { min-height: 60px; }
-      .${NS}-bar button { height: 44px; }
-      .${NS}-modes button { height: 44px; min-width: 44px; justify-content: center; }
-      .${NS}-round-head { min-height: 44px; }
-      .${NS}-bar [data-act=activity] { width: 44px; }
+      :root {
+        --ayna-bar-min: 60px; --ayna-tap: 44px; --ayna-icon-tap: 44px;
+        --ayna-mode-tap: 44px; --ayna-mode-min: 44px; --ayna-row-tap: 44px;
+      }
     }
   `;
   document.documentElement.appendChild(css);
@@ -1336,12 +1344,7 @@
     bar.querySelector('[data-act=tasks]').addEventListener('click', togglePanel);
     refreshTaskCount();
     const overflow = bar.querySelector('.' + NS + '-overflow');
-    const opener = bar.querySelector('[data-act=overflow]');
-    const setMenu = (open) => {
-      overflow.classList.toggle(NS + '-open', open);
-      opener.setAttribute('aria-expanded', String(open));
-    };
-    opener.addEventListener('click', () => setMenu(!overflow.classList.contains(NS + '-open')));
+    bar.querySelector('[data-act=overflow]').addEventListener('click', () => setMenu(!overflow.classList.contains(NS + '-open')));
     // Choosing anything in it closes it; the item's own handler still runs.
     overflow.addEventListener('click', () => setMenu(false));
     bar.querySelector('[data-act=more]').addEventListener('click', () => {
@@ -1375,16 +1378,10 @@
           '<button data-act="stay">Stay open</button>' +
         '</div>';
 
-      const end = setTimeout(() => {
-        cleanup();
-        window.__aynaApprove();
-      }, 1500);
-      // Node keeps its own copy of the countdown, so a reload in this moment
-      // cannot leave the window open after Close was pressed.
+      // Node holds the countdown, so a reload in this moment cannot lose it.
       window.__aynaClosing?.(true);
 
       bar.querySelector('[data-act=stay]').addEventListener('click', () => {
-        clearTimeout(end);
         window.__aynaClosing?.(false);
         closing = false;
         setPhase('review');
@@ -2461,18 +2458,12 @@
     return { top: 0, bottom: Math.round(b.bottom) + 12, height: Math.round(b.height) };
   }
 
-  /** Kept for callers that only care how much vertical room is gone. */
-  function barSafeZone() {
-    return barZone().height ? barZone().height + 28 : 0;
-  }
-
   function placeFloating(el, r) {
     // Remember the anchor so a resize can put it back in the right place.
     el.__aynaAnchor = r;
 
     const vw = viewportW();
     const vh = viewportH();
-    const safe = barSafeZone();
 
     /*
       Bound the panel to what the window can actually show, then measure it. A
@@ -3511,11 +3502,11 @@
 
     const b = document.createElement('b');
     if (said) {
-      b.textContent = e.from === 'user' ? 'You' : 'Claude';
+      b.textContent = SPEAKER[lane];
     } else {
       row.dataset.step = '';
       if (tone) row.dataset.tone = tone;
-      row.title = t.textContent + ' · ' + ({ you: 'You', claude: 'Claude', ayna: AYNA }[lane] ?? lane);
+      row.title = t.textContent + ' · ' + (SPEAKER[lane] ?? lane);
       b.textContent = glyph ?? '·';
     }
 
@@ -3661,13 +3652,13 @@
     else if (verdicts.length && verdicts.every((v) => v === 'approved')) setCard(card, 'approved');
   }
 
-  function item({ who, lane, text, detail, at, tone }) {
+  function item({ lane, text, detail, at, tone }) {
     const row = document.createElement('div');
     row.className = NS + '-item';
     row.dataset.lane = lane;
     if (tone) row.dataset.tone = tone;
     const b = document.createElement('b');
-    b.textContent = who;
+    b.textContent = SPEAKER[lane];
     const t = document.createElement('i');
     t.className = NS + '-at';
     t.textContent = at ? clock(at) : '';
@@ -3861,7 +3852,7 @@
         // Claude's own suggestions, or a check's (the taste review files these).
         const ours = e.source && e.source !== 'claude';
         const row = item({
-          who: ours ? AYNA : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
+          lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
           detail: 'a suggestion · waiting for your word',
         });
         // Not the round's, so not in its card, where it would fold away unseen.
@@ -3878,9 +3869,8 @@
       if (myTab && e.tabId !== myTab) {
         // Signed by whoever wrote it. A note with no source is the user's own —
         // from another window, the CLI or an import — not the checker's.
-        const [who, lane] =
-          e.source === 'claude' ? ['Claude', 'claude'] : e.source && e.source !== 'user' ? [AYNA, 'ayna'] : ['You', 'you'];
-        const row = item({ who, lane, text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks' });
+        const lane = e.source === 'claude' ? 'claude' : e.source && e.source !== 'user' ? 'ayna' : 'you';
+        const row = item({ lane, text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks' });
         lines.appendChild(row);
         return true;
       }
@@ -3888,7 +3878,7 @@
       card.tasks.set(e.taskId, e.status ?? 'open');
       card.raised.add(e.taskId);
       cardOfTask.set(e.taskId, card);
-      const row = addToCard(card, item({ who: 'You', lane: 'you', text: e.comment ?? '', detail: pageOf(e.url), at: e.at }));
+      const row = addToCard(card, item({ lane: 'you', text: e.comment ?? '', detail: pageOf(e.url), at: e.at }));
       attachCrop(row, e.taskId);
       return true;
     }
@@ -3898,11 +3888,11 @@
       const note = quote(noteOfTask.get(e.taskId));
       if (card?.tasks.has(e.taskId) || card === last) card?.tasks.set(e.taskId, e.status);
       const said = {
-        approved: { who: 'You', lane: 'you', text: 'Approved', tone: 'good' },
-        in_progress: { who: 'Claude', lane: 'claude', text: 'Working on it' },
-        applied: { who: 'Claude', lane: 'claude', text: 'Done' },
-        needs_confirmation: { who: AYNA, lane: 'ayna', text: 'Needs your confirmation', tone: 'warn' },
-        obsolete: { who: AYNA, lane: 'ayna', text: 'No longer needed' },
+        approved: { lane: 'you', text: 'Approved', tone: 'good' },
+        in_progress: { lane: 'claude', text: 'Working on it' },
+        applied: { lane: 'claude', text: 'Done' },
+        needs_confirmation: { lane: 'ayna', text: 'Needs your confirmation', tone: 'warn' },
+        obsolete: { lane: 'ayna', text: 'No longer needed' },
       }[e.status];
       // "rejected" is drawn from its own event, which carries the note; "open"
       // again is bookkeeping for a retry, not something anyone did.
@@ -3943,7 +3933,7 @@
       const how = { user: 'you said the changes are in', 'file-change': 'noticed from the edits' }[e.via] ?? '';
       const files = e.files ?? [];
       const row = addToCard(card, item({
-        who: 'Claude', lane: 'claude', at: e.at, detail: how,
+        lane: 'claude', at: e.at, detail: how,
         text: files.length ? 'Finished · ' + plural(files.length, 'file') : 'Finished',
       }));
       if (files.length) row.appendChild(fileList(e.key, files));
@@ -3956,7 +3946,7 @@
     if (e.event === 'gate') {
       const card = roundCard(e.round);
       if (!card) return false;
-      addToCard(card, item({ who: AYNA, lane: 'ayna', at: e.at, ...gateWords(e) }));
+      addToCard(card, item({ lane: 'ayna', at: e.at, ...gateWords(e) }));
       // Offered once the round has finished landing — the check is the last
       // step of that — so an undo never races the reload that shows the change.
       if (card.files?.length && card.state !== 'undone' && !card.el.querySelector('.' + NS + '-round-acts')) {
@@ -3969,7 +3959,7 @@
       const card = roundCard(e.round);
       if (!card) return false;
       addToCard(card, item({
-        who: 'You', lane: 'you', text: 'Undid this round', tone: 'warn', at: e.at,
+        lane: 'you', text: 'Undid this round', tone: 'warn', at: e.at,
         detail: plural(e.files?.length ?? 0, 'file') + ' put back as they were',
       }));
       card.el.querySelector('.' + NS + '-round-acts')?.remove();
@@ -3981,7 +3971,7 @@
     if (e.event === 'rejected') {
       const card = [...cards].reverse().find((c) => c.state === 'ready' || c.state === 'sentback') ?? last;
       if (!card) return false;
-      addToCard(card, item({ who: 'You', lane: 'you', text: 'Sent back', detail: quote(e.comment), tone: 'warn', at: e.at }));
+      addToCard(card, item({ lane: 'you', text: 'Sent back', detail: quote(e.comment), tone: 'warn', at: e.at }));
       setCard(card, 'sentback');
       return true;
     }
@@ -4022,8 +4012,6 @@
     Activity button at the bar's left end. The button's dot says whose move it
     is when a round is waiting.
   */
-  const NARROW = '(max-width: 899px)';
-  const isNarrow = () => Boolean(window.matchMedia && window.matchMedia(NARROW).matches);
   function buildDrawer() {
     if (scrim) return;
     scrim = document.createElement('div');
@@ -4051,15 +4039,16 @@
     them, so a menu or the task list stayed over the page while the user went
     back to judging it.
   */
-  function closeMenu() {
-    const menu = bar?.querySelector('.' + NS + '-overflow.' + NS + '-open');
-    if (!menu) return false;
-    menu.classList.remove(NS + '-open');
-    bar.querySelector('[data-act=overflow]')?.setAttribute('aria-expanded', 'false');
+  /** Open or close the ⋯ menu, from wherever; true when that changed anything. */
+  function setMenu(open) {
+    const menu = bar?.querySelector('.' + NS + '-overflow');
+    if (!menu || menu.classList.contains(NS + '-open') === open) return false;
+    menu.classList.toggle(NS + '-open', open);
+    bar.querySelector('[data-act=overflow]')?.setAttribute('aria-expanded', String(open));
     return true;
   }
   function closeLayers() {
-    if (closeMenu()) return true;
+    if (setMenu(false)) return true;
     if (panel) {
       closePanel();
       return true;
@@ -4076,7 +4065,7 @@
     (e) => {
       const t = e.target;
       // A press on what opened it is left to that button, which toggles it.
-      if (!t.closest?.('.' + NS + '-overflow, [data-act=overflow]')) closeMenu();
+      if (!t.closest?.('.' + NS + '-overflow, [data-act=overflow]')) setMenu(false);
       if (panel && !panel.contains(t) && !t.closest?.('[data-act=tasks], [data-act=earlier]')) closePanel();
     },
     true,
@@ -4254,10 +4243,9 @@
     consoleEl.innerHTML =
       '<div class="' + NS + '-console-head">' +
         '<span class="' + NS + '-dotlive"></span><span class="' + NS + '-console-title">Activity</span>' +
-        '<span class="' + NS + '-agents"></span>' +
         '<span class="' + NS + '-spacer"></span>' +
-        '<button data-act="fold" title="Hide activity" aria-label="Hide activity" aria-expanded="true">' +
-          RAIL_ICON + '</button>' +
+        '<button data-act="fold">' + RAIL_ICON + '</button>' +
+        '<span class="' + NS + '-agents"></span>' +
       '</div>' +
       '<div class="' + NS + '-earlier" hidden><span></span><button data-act="earlier">Show</button></div>' +
       /*
@@ -4517,13 +4505,11 @@
       pointer, for a number that was usually the same as before.
     */
     let chip = el.querySelector('.' + NS + '-chip');
-    if (pending && !chip) {
-      chip = document.createElement('span');
-      chip.className = NS + '-chip';
-      el.appendChild(chip);
+    if (!pending) chip?.remove();
+    else {
+      chip ??= Object.assign(el.appendChild(document.createElement('span')), { className: NS + '-chip' });
+      if (chip.textContent !== String(pending)) chip.textContent = String(pending);
     }
-    if (chip && !pending) chip.remove();
-    else if (chip && chip.textContent !== String(pending)) chip.textContent = String(pending);
     el.setAttribute('aria-label', pending ? `Tasks, ${pending} pending` : 'Tasks');
   }
 
@@ -4537,6 +4523,8 @@
   */
   buildConsole();
 
+  // Called by Node at the end of the close countdown.
+  window.__aynaCleanup = cleanup;
   function cleanup() {
     clearInterval(consoleTimer);
     consoleEl?.remove();

@@ -46,6 +46,7 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
 
   const drain = () => page.evaluate(() => window.__resizes.splice(0));
 
+  // One pixel of a capture, the middle one unless told otherwise.
   const pixelAt = (buf, x, y) =>
     page.evaluate(
       async ([u, px, py]) => {
@@ -57,25 +58,13 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
         c.height = img.height;
         const g = c.getContext('2d');
         g.drawImage(img, 0, 0);
-        const d = g.getImageData(px, py, 1, 1).data;
+        const d = g.getImageData(px ?? Math.floor(img.width / 2), py ?? Math.floor(img.height / 2), 1, 1).data;
         return `${d[0]},${d[1]},${d[2]}`;
       },
       ['data:image/png;base64,' + buf.toString('base64'), x, y],
     );
+  const middlePixel = (buf) => pixelAt(buf);
 
-  const middlePixel = (buf) =>
-    page.evaluate(async (u) => {
-      const img = new Image();
-      img.src = u;
-      await img.decode();
-      const c = document.createElement('canvas');
-      c.width = img.width;
-      c.height = img.height;
-      const g = c.getContext('2d');
-      g.drawImage(img, 0, 0);
-      const d = g.getImageData(Math.floor(img.width / 2), Math.floor(img.height / 2), 1, 1).data;
-      return `${d[0]},${d[1]},${d[2]}`;
-    }, 'data:image/png;base64,' + buf.toString('base64'));
 
   test('a visible region is captured without resizing the page', async () => {
     await drain();
@@ -124,9 +113,10 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
   test('a crop hides the marks over the element, not the bar or the rail beside it', async () => {
     const chrome = await context.newPage();
     try {
-      // Written the way the overlay writes it: the rail's width is a clamp() of
-      // the window, which a custom property hands back unresolved.
-      await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:var(--ayna-rail-inset, clamp(150px, 25vw, 400px))"><body style="margin:0">
+      // Written the way the overlay writes it: the inset is the rail's clamp() of
+      // the window, registered as a length so it reads back in pixels.
+      await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:var(--ayna-rail-inset, clamp(150px, 25vw, 400px))">
+        <style>@property --ayna-inset-left { syntax: '<length>'; inherits: true; initial-value: 0px; }</style><body style="margin:0">
         <div id="nav" style="position:absolute;top:50px;left:204px;width:300px;height:40px;background:rgb(255,0,0)"></div>
         <div class="ayna-ov-bar" data-ayna="1" style="position:fixed;top:0;left:200px;right:0;height:50px;background:#000;box-shadow:0 1px 12px rgba(0,0,0,.6)"></div>
         <div class="ayna-ov-console" data-ayna="1" style="position:fixed;top:0;bottom:0;left:0;width:clamp(150px, 25vw, 400px);background:#000"></div>
