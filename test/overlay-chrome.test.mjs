@@ -22,6 +22,7 @@ import path from 'node:path';
 import { openBrowser } from '../src/browser.mjs';
 import { CHECKS } from '../src/audit.mjs';
 import { runAnnotate } from '../src/annotate.mjs';
+import { DEFAULT_THEME } from '../src/config.mjs';
 import { hasBrowser } from './helpers.mjs';
 
 /** The audit, but with ayna's own elements eligible to be found as coverers. */
@@ -353,9 +354,14 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
     await browser?.close().catch(() => {});
   });
 
-  // Deliberately no `theme`: this measures the fallbacks, which is what an
-  // install with no ayna.config.json actually renders.
-  test('every control in the comment box is readable with no theme configured', async () => {
+  /*
+    Every readable control in the comment box and the bar, measured.
+
+    With a note already saved, so Send is live and the Tasks chip is showing:
+    those are the controls that went unreadable, and an empty review has
+    neither of them in its enabled state.
+  */
+  async function measureControls(theme) {
     const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1><p>Body copy.</p></main>');
     const dir = await mkdtemp(path.join(tmpdir(), 'ayna-selfcontrast-'));
     try {
@@ -363,10 +369,16 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
       await runAnnotate({
         browser,
         url,
+        theme,
         outDir: path.join(dir, 'out'),
         projectDir: dir,
         viewport: { width: 1200, height: 820 },
         onReady: async (page) => {
+          await page.click('.title');
+          await page.waitForSelector('.ayna-ov-pop textarea', { timeout: 10000 });
+          await page.fill('.ayna-ov-pop textarea', 'a note, so Send is live');
+          await page.click('.ayna-ov-save');
+          await page.waitForTimeout(400);
           await page.click('.title');
           await page.waitForSelector('.ayna-ov-pop textarea', { timeout: 10000 });
           await page.waitForTimeout(350);
@@ -457,17 +469,40 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
         },
       });
 
-      assert.ok(rows.length >= 4, `only measured ${rows.length} controls — the panel did not open`);
-      const failed = rows.filter((r) => r.ratio < r.needs);
-      assert.deepEqual(
-        failed,
-        [],
-        `ayna's own controls fail the contrast floor it enforces:\n` +
-          failed.map((f) => `  ${f.what} "${f.text}" ${f.ratio}:1 needs ${f.needs}`).join('\n'),
-      );
+      return rows;
     } finally {
       srv.close();
       await rm(dir, { recursive: true, force: true });
     }
+  }
+
+  const assertReadable = (rows) => {
+    assert.ok(rows.length >= 4, `only measured ${rows.length} controls — the panel did not open`);
+    const failed = rows.filter((r) => r.ratio < r.needs);
+    assert.deepEqual(
+      failed,
+      [],
+      `ayna's own controls fail the contrast floor it enforces:\n` +
+        failed.map((f) => `  ${f.what} "${f.text}" ${f.ratio}:1 needs ${f.needs}`).join('\n'),
+    );
+  };
+
+  // No `theme`: the fallbacks, which is what every test and probe renders.
+  test('every control in the comment box and the bar is readable with no theme', async () => {
+    assertReadable(await measureControls(undefined));
+  });
+
+  /*
+    And the theme the CLI applies, which is what every real install renders:
+    loadConfig merges DEFAULT_THEME whether or not a project has a config.
+    Only measuring the fallbacks is how the active mode went white-on-ivory and
+    Send went white-on-orange in every window anyone actually opened, while
+    every test here passed.
+  */
+  test('every control in the comment box and the bar is readable with the default theme', async () => {
+    const rows = await measureControls(DEFAULT_THEME);
+    assertReadable(rows);
+    assert.ok(rows.some((r) => r.text === 'Send to Claude'), 'Send was measured in its enabled state');
+    assert.ok(rows.some((r) => r.text === 'Comment'), 'the active mode was measured');
   });
 });
