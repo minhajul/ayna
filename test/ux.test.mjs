@@ -1128,3 +1128,119 @@ describe('asking for a design direction', { skip: !hasBrowser && 'AYNA_SKIP_BROW
     );
   });
 });
+
+/*
+  A phone-sized window.
+
+  The rail kept clamp(300px, 24vw, 480px) at every size, so a 390px window gave
+  the app 90px and the bar wrapped into three rows with Send off the edge — at
+  exactly the size people narrow a window to, to review a mobile layout.
+*/
+describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, () => {
+  let browser;
+  before(async () => {
+    browser = await openBrowser({ headless: true });
+  });
+  after(async () => {
+    await browser?.close().catch(() => {});
+  });
+
+  test('the page keeps the width, the bar one row, and the rail opens from the bar as a drawer', async () => {
+    const { srv, url } = await pollingServer('<h1 class="t">Hello</h1><p>Body copy for the page.</p>');
+    const dir = await mkdtemp(path.join(tmpdir(), 'ayna-phone-'));
+    const seen = {};
+    try {
+      await runAnnotate({
+        browser,
+        url,
+        outDir: path.join(dir, 'out'),
+        projectDir: dir,
+        store: await openStore(dir),
+        viewport: { width: 390, height: 844 },
+        onReady: async (page) => {
+          await page.waitForTimeout(900);
+          seen.open = await page.evaluate(() => {
+            const r = (s) => document.querySelector(s)?.getBoundingClientRect();
+            const shown = (s) => {
+              const el = document.querySelector(s);
+              return Boolean(el) && getComputedStyle(el).display !== 'none';
+            };
+            return {
+              page: Math.round(r('body').width),
+              bar: Math.round(r('.ayna-ov-bar').height),
+              send: Math.round(r('[data-act=send]').right),
+              rail: shown('.ayna-ov-console'),
+              activity: shown('.ayna-ov-bar [data-act=activity]'),
+              // In the bar, at its left end — not floating over the page.
+              activityLeft: Math.round(r('.ayna-ov-bar [data-act=activity]').left),
+              brand: shown('.ayna-ov-bar .ayna-ov-brand'),
+            };
+          });
+
+          await page.click('.t');
+          await page.waitForSelector('.ayna-ov-pop textarea');
+          seen.box = await page.evaluate(() => {
+            const r = document.querySelector('.ayna-ov-pop').getBoundingClientRect();
+            return { left: Math.round(r.left), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom) };
+          });
+          await page.fill('.ayna-ov-pop textarea', 'tighter');
+          await page.click('.ayna-ov-save');
+          await page.waitForTimeout(400);
+          await page.click('[data-act=send]');
+          await page.waitForTimeout(600);
+          await writeFile(path.join(dir, 'out', 'applied'), '1');
+          await page.waitForSelector('[data-act=overflow]', { state: 'visible', timeout: 20000 });
+          await page.waitForTimeout(800);
+
+          const visible = (s) => page.evaluate((s) => {
+            const el = document.querySelector(s);
+            return Boolean(el) && el.getBoundingClientRect().width > 0;
+          }, s);
+          seen.menuBefore = await visible('[data-act=approve-all]');
+          await page.click('[data-act=overflow]');
+          seen.menuAfter = await visible('[data-act=approve-all]');
+          await page.click('[data-act=overflow]');
+
+          seen.dot = await page.evaluate(() => getComputedStyle(document.querySelector('.ayna-ov-activity-dot')).display);
+          await page.click('.ayna-ov-bar [data-act=activity]');
+          await page.waitForTimeout(600);
+          seen.sheet = await page.evaluate(() => {
+            const r = document.querySelector('.ayna-ov-console').getBoundingClientRect();
+            const bar = document.querySelector('.ayna-ov-bar').getBoundingClientRect();
+            const marker = document.querySelector('.ayna-ov-revbar')?.getBoundingClientRect();
+            const onTop = marker && document.elementFromPoint(marker.x + marker.width / 2, marker.y + marker.height / 2);
+            return {
+              left: Math.round(r.left),
+              top: Math.round(r.top - bar.bottom),
+              width: Math.round(r.width),
+              bottom: Math.round(innerHeight - r.bottom),
+              rounds: document.querySelectorAll('.ayna-ov-round').length,
+              markerCovered: marker ? Boolean(onTop?.closest('.ayna-ov-scrim, .ayna-ov-console')) : null,
+            };
+          });
+          await page.mouse.click(380, 400); // the backdrop, beside the drawer
+          await page.waitForTimeout(300);
+          seen.closed = await page.evaluate(() => getComputedStyle(document.querySelector('.ayna-ov-console')).display);
+          await page.close();
+        },
+      });
+    } finally {
+      srv.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+
+    assert.equal(seen.open.page, 390, 'the app gets the whole width, not what the rail leaves');
+    assert.ok(seen.open.bar <= 60, `the bar wrapped to ${seen.open.bar}px`);
+    assert.ok(seen.open.send <= 390, 'Send is on screen');
+    assert.deepEqual([seen.open.rail, seen.open.activity, seen.open.brand], [false, true, false]);
+    assert.ok(seen.open.activityLeft <= 16, 'Activity sits at the bar\'s left end');
+    assert.equal(seen.dot, 'block', 'with a dot while it is your turn');
+    assert.deepEqual(seen.box, { left: 8, right: 8, bottom: 8 }, 'the comment box is a sheet along the bottom');
+    assert.deepEqual([seen.menuBefore, seen.menuAfter], [false, true], 'review actions wait behind ⋯');
+    assert.deepEqual([seen.sheet.left, seen.sheet.top, seen.sheet.bottom], [0, 0, 0], 'a drawer from the left, under the bar');
+    assert.equal(seen.sheet.width, Math.round(390 * 0.86));
+    assert.equal(seen.sheet.rounds, 1);
+    assert.notEqual(seen.sheet.markerCovered, false, 'a review marker shows through the backdrop');
+    assert.equal(seen.closed, 'none', 'tapping the backdrop closes the sheet');
+  });
+});

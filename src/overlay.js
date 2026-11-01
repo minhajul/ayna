@@ -15,6 +15,24 @@
 
   const NS = 'ayna-ov';
   /*
+    The bar's left end. On a narrow window the Activity button stands in for
+    the name; written with the drawer's current state, because each phase
+    rebuilds the bar's markup.
+  */
+  const brand = () =>
+    '<button data-act="activity" class="' + NS + '-ghost" aria-label="Activity" aria-expanded="' +
+    String(drawerOpen) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' +
+    '<span class="' + NS + '-activity-dot"></span></button>' +
+    '<span class="' + NS + '-brand">ayna</span>';
+  // The Tasks button's face: an icon that stays, and a word that gives way when
+  // the bar is short of room.
+  const TASKS_FACE =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/>' +
+    '<path d="M4 6h.01M4 12h.01M4 18h.01"/></svg><span class="' + NS + '-label">Tasks</span>';
+  /*
     The rail's width, as the browser's arithmetic rather than a number.
 
     A fixed 264px was an eighth of a 2000px window — prose wrapped at thirty-odd
@@ -60,6 +78,10 @@
   let hl = null;
   let bar = null;
   let tag = null;
+  // The narrow-window drawer. Up here, not beside its functions: the bar is
+  // drawn — and reads drawerOpen — long before execution reaches them.
+  let scrim = null;
+  let drawerOpen = false;
 
   function start() {
   const css = document.createElement('style');
@@ -239,6 +261,68 @@
     }
     .${NS}-grip:hover::after, .${NS}-grip.${NS}-dragging::after { background: var(--ayna-accent, #de9446); }
     .${NS}-console.${NS}-min .${NS}-grip { display: none; }
+    /*
+      The drawer opens from the bar's own left end, where the rail lives on a
+      wide window — not from a button floating over the page. A floating button
+      sat on whatever the app keeps at its bottom edge, which on a phone layout
+      is its tab bar or its sticky call to action: ayna covering the app, the one
+      thing the bar was moved to the top to stop doing.
+
+      The status is a dot, not words: the bar already says "waiting" or
+      "1 left to judge"; the dot only says the drawer has news.
+    */
+    .${NS}-bar [data-act=activity] { display: none; position: relative; width: 36px; padding: 0; justify-content: center; }
+    .${NS}-activity-dot {
+      position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
+      display: none; box-shadow: 0 0 0 2px var(--ayna-bar, #0d0d0f);
+    }
+    .${NS}-bar[data-activity=ready] .${NS}-activity-dot { display: block; background: var(--ayna-you, #e8b478); }
+    .${NS}-bar[data-activity=waiting] .${NS}-activity-dot {
+      display: block; background: var(--ayna-live, #e0b978); animation: ${NS}-breathe 2.4s ease-in-out infinite;
+    }
+    .${NS}-bar[data-drawer=open] [data-act=activity] { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.24); }
+    .${NS}-scrim { display: none; }
+    /* Above the review markers, which otherwise show through it at full strength. */
+    .${NS}-scrim { position: fixed; inset: 0; z-index: 2147483647; background: rgba(0,0,0,.45); }
+    /*
+      Narrow: no column, a drawer over the page, under the bar, from the left.
+      --ayna-rail-inset is what the page's inset falls back to, so zeroing it
+      here hands the page its full width with no script, at every frame of a
+      resize.
+    */
+    @media (max-width: 899px) {
+      :root { --ayna-rail-inset: 0px; }
+      .${NS}-console { display: none; }
+      .${NS}-console.${NS}-open {
+        display: flex; z-index: 2147483647;
+        top: var(--ayna-bar-h, 52px); bottom: 0; left: 0; width: min(380px, 86vw);
+        background: var(--ayna-surface, #0a0a0b);
+        box-shadow: 12px 0 32px rgba(0,0,0,.45);
+      }
+      .${NS}-console .${NS}-grip { display: none; }
+      .${NS}-bar [data-act=activity] { display: inline-flex; }
+      .${NS}-bar .${NS}-brand { display: none; }
+      .${NS}-scrim.${NS}-open { display: block; top: var(--ayna-bar-h, 52px); }
+    }
+    /* A phone: the comment box is a sheet along the bottom, the element still in view above it. */
+    @media (max-width: 599px) {
+      .${NS}-pop {
+        left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important;
+        width: auto !important; max-width: none !important;
+      }
+    }
+    /*
+      A finger, not a cursor: 44px targets, the size ayna itself flags anything
+      under on everyone else's page.
+    */
+    @media (pointer: coarse) {
+      .${NS}-bar { min-height: 60px; }
+      .${NS}-bar button { height: 44px; }
+      .${NS}-modes button { height: 40px; min-width: 44px; justify-content: center; }
+      .${NS}-console-head { min-height: 60px; }
+      .${NS}-round-head { min-height: 44px; }
+      .${NS}-bar [data-act=activity] { width: 44px; }
+    }
     .${NS}-console-head {
       display: flex; align-items: center; align-content: center; gap: 7px; padding: 8px 14px; flex-wrap: wrap;
       min-height: 52px; box-sizing: border-box;
@@ -592,6 +676,9 @@
     }
     .${NS}-bar button:hover { filter: brightness(1.08); }
     .${NS}-bar button:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: 2px; }
+    .${NS}-bar button svg { width: 14px; height: 14px; flex: none; }
+    .${NS}-bar [data-act=overflow] { display: none; font-size: 16px; letter-spacing: .05em; }
+    .${NS}-overflow { display: contents; }
     /*
       After the generic rule on purpose: same specificity, so source order
       decides. Written above it, every unselected mode inherited the primary blue,
@@ -623,10 +710,34 @@
       costs the page 40px of height and moves it while the window is dragged.
     */
     .${NS}-bar { container-type: inline-size; }
+    /*
+      Below this a hint only fits as "Click …", which says nothing. "Sent —
+      waiting for Claude" is not a hint but the window's state, so it stays and
+      shortens with an ellipsis instead.
+    */
+    @container (max-width: 820px) {
+      .${NS}-bar .${NS}-hint:not(.${NS}-waiting) { display: none; }
+    }
     @container (max-width: 600px) {
       .${NS}-modes .${NS}-label { display: none; }
       .${NS}-modes button { padding: 0 10px; }
-      .${NS}-bar .${NS}-hint { display: none; }
+      /* Review's three end-the-round actions move behind ⋯, as a menu under it. */
+      .${NS}-bar [data-act=overflow] { display: inline-flex; }
+      .${NS}-overflow {
+        display: none; position: absolute; right: 12px; top: calc(100% + 6px);
+        flex-direction: column; align-items: stretch; gap: 4px; padding: 6px; min-width: 168px;
+        background: var(--ayna-panel, #121214); border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
+        border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.45);
+      }
+      .${NS}-overflow.${NS}-open { display: flex; }
+      .${NS}-overflow button { justify-content: flex-start; }
+    }
+    /* A phone: the mark without the name, Tasks as its icon, Send as one word. */
+    @container (max-width: 460px) {
+      .${NS}-brand { font-size: 0; gap: 0; padding-right: 0; border-right: 0; }
+      .${NS}-bar [data-act=tasks] .${NS}-label, .${NS}-bar .${NS}-long { display: none; }
+      .${NS}-bar { gap: 8px; }
+      .${NS}-bar button { padding: 0 10px; }
     }
     .${NS}-modes button:hover { background: transparent; color: var(--ayna-text, #f4f2ef); filter: none; }
     .${NS}-modes button:hover::before { background: rgba(255,255,255,.06); }
@@ -947,6 +1058,10 @@
   bar.className = NS + '-bar';
   bar.setAttribute('data-ayna', '1');
   document.documentElement.appendChild(bar);
+  // Listened for on the bar, which outlives the markup each phase rebuilds.
+  bar.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-act=activity]')) setDrawer(!drawerOpen);
+  });
 
   // Start out of the way on a sign-in screen: there is nothing to review until
   // the user is through it, and every click would otherwise become a comment.
@@ -1062,7 +1177,7 @@
       */
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-hint">' + HINT[state.mode] + '</span>' +
         '</div>' +
         '<div class="' + NS + '-modes" role="group" aria-label="Mode">' +
@@ -1074,9 +1189,9 @@
           ).join('') +
         '</div>' +
         '<div class="' + NS + '-barside ' + NS + '-baractions">' +
-          '<button data-act="tasks" class="' + NS + '-ghost" title="Everything still owed on this page">Tasks</button>' +
+          '<button data-act="tasks" class="' + NS + '-ghost" title="Everything still owed on this page">' + TASKS_FACE + '</button>' +
           '<button data-act="send"' + (state.seq ? '' : ' disabled') +
-            (state.seq ? '' : ' title="Comment on something first"') + '>Send to Claude</button>' +
+            (state.seq ? '' : ' title="Comment on something first"') + '><span>Send<span class="' + NS + '-long"> to Claude</span></span></button>' +
         '</div>';
 
       for (const b of bar.querySelectorAll('[data-act=setmode]')) {
@@ -1117,7 +1232,7 @@
       */
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-spin" aria-hidden="true"></span>' +
           '<span class="' + NS + '-waiting ' + NS + '-hint">Sent — waiting for Claude to pick this up…</span>' +
         '</div>' +
@@ -1162,18 +1277,26 @@
     */
     bar.innerHTML =
       '<div class="' + NS + '-barside">' +
-        '<span class="' + NS + '-brand">ayna</span>' +
+        brand() +
         '<span class="' + NS + '-hint">Changes are live — judge each one</span>' +
       '</div>' +
       '<div class="' + NS + '-progress ' + NS + '-count"></div>' +
       '<div class="' + NS + '-barside ' + NS + '-baractions">' +
-        '<button data-act="tasks" class="' + NS + '-ghost">Tasks</button>' +
-        '<button data-act="more" class="' + NS + '-ghost" ' +
-        'title="Go back to commenting without ending the review">Comment more</button>' +
-        '<button data-act="approve-all" class="' + NS + '-ghost" ' +
-        'title="Marks every pending change approved">Approve all</button>' +
-        '<button data-act="close" class="' + NS + '-quiet" ' +
-        'title="Ends the review — anything unjudged stays pending">Close</button>' +
+        '<button data-act="tasks" class="' + NS + '-ghost">' + TASKS_FACE + '</button>' +
+        /*
+          Inline on a wide bar; behind ⋯ on a short one, where three more
+          outlined buttons would wrap the bar onto a second and third row.
+        */
+        '<button data-act="overflow" class="' + NS + '-ghost" aria-label="More actions" aria-haspopup="true" ' +
+        'aria-expanded="false">⋯</button>' +
+        '<div class="' + NS + '-overflow">' +
+          '<button data-act="more" class="' + NS + '-ghost" ' +
+          'title="Go back to commenting without ending the review">Comment more</button>' +
+          '<button data-act="approve-all" class="' + NS + '-ghost" ' +
+          'title="Marks every pending change approved">Approve all</button>' +
+          '<button data-act="close" class="' + NS + '-quiet" ' +
+          'title="Ends the review — anything unjudged stays pending">Close</button>' +
+        '</div>' +
       '</div>';
 
     // Re-anchor every comment on the changed page so each one can be judged
@@ -1182,6 +1305,15 @@
 
     bar.querySelector('[data-act=tasks]').addEventListener('click', togglePanel);
     refreshTaskCount();
+    const overflow = bar.querySelector('.' + NS + '-overflow');
+    const opener = bar.querySelector('[data-act=overflow]');
+    const setMenu = (open) => {
+      overflow.classList.toggle(NS + '-open', open);
+      opener.setAttribute('aria-expanded', String(open));
+    };
+    opener.addEventListener('click', () => setMenu(!overflow.classList.contains(NS + '-open')));
+    // Choosing anything in it closes it; the item's own handler still runs.
+    overflow.addEventListener('click', () => setMenu(false));
     bar.querySelector('[data-act=more]').addEventListener('click', () => {
       clearReview();
       state.seq = 0;
@@ -1206,7 +1338,7 @@
       closing = true;
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-hint">Closing the review — anything unjudged stays waiting</span>' +
         '</div>' +
         '<div class="' + NS + '-barside ' + NS + '-baractions">' +
@@ -2181,7 +2313,9 @@
       pixels below the console no matter what the arithmetic said. Measuring the
       viewport the same way everything else here measures it removes the argument.
     */
-    document.documentElement.style.setProperty('--ayna-inset-left', rail);
+    // Through a variable the narrow-window rule zeroes, so going narrow moves the
+    // page without this function running — see the 899px media query.
+    document.documentElement.style.setProperty('--ayna-inset-left', `var(--ayna-rail-inset, ${rail})`);
     document.documentElement.style.setProperty('--ayna-inset-bottom', '0px');
 
     /*
@@ -3476,6 +3610,7 @@
     card.el.querySelector('b').textContent = card.round ? 'Round ' + card.round : 'Next round';
     if (at) card.el.querySelector('.' + NS + '-at').textContent = card.lastAt = clock(at);
     card.el.querySelector('.' + NS + '-pill').textContent = CARD_STATE[state];
+    updateActivity();
     if (card.head) {
       setFold(card, card.folded);
       foldSettled();
@@ -3833,6 +3968,48 @@
     return true;
   }
 
+  /*
+    On a narrow window the rail is a sheet, not a column.
+
+    It took clamp(300px, 24vw, 480px) at every size, so a 390px phone gave the
+    app 90px — and reviewing a site's mobile layout is the commonest reason to
+    narrow the window at all. Below 900px the rail takes no width (the media
+    query zeroes --ayna-rail-inset, so the page follows without any script),
+    and opens over the page from a floating button instead: a side drawer on a
+    tablet, a bottom sheet on a phone. Its badge says when a round is waiting.
+  */
+  const NARROW = '(max-width: 899px)';
+  const isNarrow = () => Boolean(window.matchMedia && window.matchMedia(NARROW).matches);
+  function buildDrawer() {
+    if (scrim) return;
+    scrim = document.createElement('div');
+    scrim.className = NS + '-scrim';
+    scrim.setAttribute('data-ayna', '1');
+    scrim.addEventListener('click', () => setDrawer(false));
+    // Same layer as the drawer, so order decides: the backdrop goes just before it.
+    document.documentElement.insertBefore(scrim, consoleEl);
+  }
+
+  function setDrawer(open) {
+    if (!consoleEl) return;
+    drawerOpen = open;
+    // A spine has no room for the log; the drawer is always the full rail.
+    if (open && consoleMin) setConsoleMinimised(false);
+    for (const el of [consoleEl, scrim]) el?.classList.toggle(NS + '-open', open);
+    if (bar) bar.dataset.drawer = open ? 'open' : '';
+    bar?.querySelector('[data-act=activity]')?.setAttribute('aria-expanded', String(open));
+    if (open) pumpConsole();
+  }
+
+  /** The Activity button's dot: whose move it is, when that is anyone's. */
+  function updateActivity() {
+    if (!bar) return;
+    const state = cards.at(-1)?.state;
+    bar.dataset.activity = state === 'ready' || state === 'waiting' ? state : '';
+    const label = { ready: 'Activity — your turn', waiting: 'Activity — Claude is working' }[state] ?? 'Activity';
+    bar.querySelector('[data-act=activity]')?.setAttribute('aria-label', label);
+  }
+
   function setConsoleMinimised(min) {
     consoleMin = min;
     if (!consoleEl) return;
@@ -4037,7 +4214,10 @@
     document.documentElement.appendChild(consoleEl);
     setRailTint();
 
-    consoleEl.querySelector('[data-act=fold]').addEventListener('click', () => setConsoleMinimised(!consoleMin));
+    consoleEl.querySelector('[data-act=fold]').addEventListener('click', () =>
+      isNarrow() ? setDrawer(false) : setConsoleMinimised(!consoleMin),
+    );
+    buildDrawer();
     consoleEl.querySelector('[data-act=earlier]').addEventListener('click', () => togglePanel());
 
     const input = consoleEl.querySelector('input');
@@ -4238,7 +4418,7 @@
     if (!el) return;
     const tasks = await window.__aynaList().catch(() => []);
     const pending = tasks.filter((t) => t.status !== 'approved').length;
-    el.textContent = 'Tasks';
+    el.innerHTML = TASKS_FACE;
     if (pending) {
       const chip = document.createElement('span');
       chip.className = NS + '-chip';
