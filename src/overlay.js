@@ -21,6 +21,8 @@
   */
   // A window with its side column: the rail. One mark for it everywhere — the
   // bar's Activity button on a narrow window, the rail's own fold on a wide one.
+  // The folded rail's width; the page is inset by the same amount.
+  const SPINE = '48px';
   const RAIL_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
@@ -246,11 +248,15 @@
         backdrop-filter: blur(22px) saturate(1.4);
       }
     }
-    /* Collapsed to a spine: still legible, costs 34px. */
-    .${NS}-console.${NS}-min { width: 34px; }
+    /*
+      Collapsed to a spine: the live dot beside the icon, read like "● Activity"
+      in the open header. Stacked in 34px, the dot floated above the icon as if
+      it were a separate control; side by side needs 48.
+    */
+    .${NS}-console.${NS}-min { width: ${SPINE}; }
     .${NS}-console.${NS}-min .${NS}-console-title,
     .${NS}-console.${NS}-min .${NS}-agents { display: none; }
-    .${NS}-console.${NS}-min .${NS}-console-head { padding: 8px 4px; justify-content: center; }
+    .${NS}-console.${NS}-min .${NS}-console-head { padding: 8px 5px; gap: 5px; justify-content: center; flex-wrap: nowrap; }
     .${NS}-console.${NS}-min .${NS}-console-head .${NS}-spacer { display: none; }
     .${NS}-console.${NS}-min .${NS}-console-head [data-act=fold] { width: 26px; height: 26px; }
     /* The edge you drag to make it wider. Double-click puts it back. */
@@ -2312,7 +2318,7 @@
     */
     // An expression, not a measurement, so the page follows the rail as the
     // window resizes without this function running.
-    const rail = !consoleEl ? '0px' : consoleMin ? '34px' : RAIL_W;
+    const rail = !consoleEl ? '0px' : consoleMin ? SPINE : RAIL_W;
 
     // Driven by the variables, so moving the bar moves the page without this
     // function running again.
@@ -2551,10 +2557,7 @@
       }, 120);
       if (pop && pop.__aynaAnchor) placeFloating(pop, pop.__aynaAnchor);
       if (card && card.__aynaAnchor) placeFloating(card, card.__aynaAnchor);
-      if (panel) {
-        panel.style.maxHeight =
-          Math.max(200, viewportH() - barSafeZone() - 32) + 'px';
-      }
+      if (panel) placePanel();
       // Review markers are anchored to live elements, so re-derive them —
       // cheaply now, and properly once the user stops dragging.
       if (state.phase === 'review') {
@@ -4031,15 +4034,22 @@
   }
 
   /*
-    The ⋯ menu and the drawer close the way any menu does: Escape, or a press
-    anywhere outside them. Only their own buttons closed them, so a menu opened
-    on a narrow bar stayed over the page while the user went back to judging it.
+    The ⋯ menu, the Tasks panel and the drawer close the way any menu does:
+    Escape, or a press anywhere outside them. Only their own buttons closed
+    them, so a menu or the task list stayed over the page while the user went
+    back to judging it.
   */
-  function closeLayers() {
+  function closeMenu() {
     const menu = bar?.querySelector('.' + NS + '-overflow.' + NS + '-open');
-    if (menu) {
-      menu.classList.remove(NS + '-open');
-      bar.querySelector('[data-act=overflow]')?.setAttribute('aria-expanded', 'false');
+    if (!menu) return false;
+    menu.classList.remove(NS + '-open');
+    bar.querySelector('[data-act=overflow]')?.setAttribute('aria-expanded', 'false');
+    return true;
+  }
+  function closeLayers() {
+    if (closeMenu()) return true;
+    if (panel) {
+      closePanel();
       return true;
     }
     if (drawerOpen) {
@@ -4052,9 +4062,10 @@
   document.addEventListener(
     'pointerdown',
     (e) => {
-      const menu = bar?.querySelector('.' + NS + '-overflow.' + NS + '-open');
-      if (!menu || menu.contains(e.target) || e.target.closest?.('[data-act=overflow]')) return;
-      closeLayers();
+      const t = e.target;
+      // A press on what opened it is left to that button, which toggles it.
+      if (!t.closest?.('.' + NS + '-overflow, [data-act=overflow]')) closeMenu();
+      if (panel && !panel.contains(t) && !t.closest?.('[data-act=tasks], [data-act=earlier]')) closePanel();
     },
     true,
   );
@@ -4336,6 +4347,18 @@
 
   const samePage = (url) => (url ?? '').split('#')[0] === location.href.split('#')[0];
 
+  /*
+    Hung from the bar the way the ⋯ menu is, 6px under it. It used the bar's
+    safe zone plus 8, which left 20px of page between the panel and the button
+    that opened it, so it read as something floating loose rather than as that
+    button's menu.
+  */
+  function placePanel() {
+    const under = bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
+    panel.style.top = under + 6 + 'px';
+    panel.style.maxHeight = Math.max(200, viewportH() - under - 18) + 'px';
+  }
+
   async function togglePanel() {
     if (panel) {
       closePanel();
@@ -4355,8 +4378,7 @@
       underneath. The list appeared to start with a stray URL and to have no way
       out of it.
     */
-    panel.style.top = barZone().bottom + 8 + 'px';
-    panel.style.maxHeight = Math.max(200, viewportH() - barZone().bottom - 24) + 'px';
+    placePanel();
 
     const pending = tasks.filter((t) => t.status !== 'approved').length;
     panel.innerHTML =

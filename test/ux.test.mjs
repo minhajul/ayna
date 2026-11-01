@@ -848,6 +848,12 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await page.waitForTimeout(800);
       seen.minimised = await overlap(page);
       seen.foldMin = await fold(page);
+      // Folded, the live dot sits beside the icon on one line, as in "● Activity".
+      seen.spine = await page.evaluate(() => {
+        const d = document.querySelector('.ayna-ov-dotlive').getBoundingClientRect();
+        const b = document.querySelector('[data-act=fold]').getBoundingClientRect();
+        return d.right <= b.left && Math.abs((d.top + d.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 ? 'side by side' : 'stacked';
+      });
       await page.click('[data-act=fold]');
       await page.waitForTimeout(800);
       seen.reopened = await overlap(page);
@@ -855,8 +861,35 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     // The fold is the Activity icon in both states, with which way it goes in its label.
     assert.deepEqual(seen, {
       open: 0, minimised: 0, reopened: 0,
-      foldOpen: 'Hide activity||true', foldMin: 'Show activity||true',
+      foldOpen: 'Hide activity||true', foldMin: 'Show activity||true', spine: 'side by side',
     });
+  });
+
+  test('the task list hangs under the bar and closes like a menu', async () => {
+    const seen = {};
+    await withConsole(async (page) => {
+      const open = () => page.evaluate(() => Boolean(document.querySelector('.ayna-ov-panel')));
+      await page.click('[data-act=tasks]');
+      await page.waitForSelector('.ayna-ov-panel');
+      seen.gap = await page.evaluate(
+        () =>
+          Math.round(document.querySelector('.ayna-ov-panel').getBoundingClientRect().top) -
+          Math.round(document.querySelector('.ayna-ov-bar').getBoundingClientRect().bottom),
+      );
+      await page.mouse.click(700, 600); // the page, away from the list
+      seen.outside = await open();
+      await page.click('[data-act=tasks]');
+      await page.waitForSelector('.ayna-ov-panel');
+      await page.click('.ayna-ov-panel .ayna-ov-panel-head');
+      seen.inside = await open();
+      await page.keyboard.press('Escape');
+      seen.escape = await open();
+      await page.click('[data-act=tasks]');
+      await page.waitForSelector('.ayna-ov-panel');
+      await page.click('[data-act=tasks]');
+      seen.toggled = await open();
+    });
+    assert.deepEqual(seen, { gap: 6, outside: false, inside: true, escape: false, toggled: false });
   });
 
   test('typing in it does not reach the page underneath', async () => {
