@@ -98,4 +98,38 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
     assert.equal(opts.fullPage, true, 'off-screen regions need the full-page path');
     assert.equal(await middlePixel(await page.screenshot(opts)), '255,0,0');
   });
+
+  /*
+    The capture's style is applied to the live page, so whatever it hides
+    blinks out of the user's window. Hiding all of ayna made the bar, the rail
+    and the comment box flash on every note.
+  */
+  test('a crop hides the marks over the element, not the bar or the rail beside it', async () => {
+    const chrome = await context.newPage();
+    try {
+      await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:200px"><body style="margin:0">
+        <div class="ayna-ov-bar" data-ayna="1" style="position:fixed;top:0;left:200px;right:0;height:50px;background:#000"></div>
+        <div class="ayna-ov-console" data-ayna="1" style="position:fixed;top:0;bottom:0;left:0;width:200px;background:#000"></div>
+        <div id="nav" style="position:absolute;top:52px;left:204px;width:300px;height:40px;background:rgb(255,0,0)"></div>
+        <div class="ayna-ov-hl" data-ayna="1" style="position:fixed;top:52px;left:204px;width:300px;height:40px;outline:2px solid orange"></div>
+      </body></html>`);
+      const rect = await chrome.evaluate(() => {
+        const r = document.querySelector('#nav').getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      });
+      const opts = await cropRegion(chrome, rect, 12);
+      assert.equal(opts.fullPage, false);
+      assert.ok(opts.clip.y >= 50 && opts.clip.x >= 200, `the padding stops at the app's edge: ${JSON.stringify(opts.clip)}`);
+
+      await chrome.addStyleTag({ content: opts.style });
+      const hidden = await chrome.evaluate(() =>
+        [...document.querySelectorAll('[data-ayna]')]
+          .filter((el) => getComputedStyle(el).visibility === 'hidden')
+          .map((el) => el.className),
+      );
+      assert.deepEqual(hidden, ['ayna-ov-hl'], 'only the mark drawn over the element is hidden for the capture');
+    } finally {
+      await chrome.close();
+    }
+  });
 });

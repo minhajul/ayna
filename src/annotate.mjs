@@ -46,8 +46,32 @@ import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs'
   Claude reads and what the activity rail shows. Everything ayna draws carries
   data-ayna; the app's own elements never do, so this hides exactly the chrome.
   `visibility`, not `display`, so nothing in the app moves.
+
+  Only what the crop would take in is hidden, though. Playwright applies the
+  style to the live page for the length of the capture, so hiding every
+  [data-ayna] blinked the bar, the rail and the open comment box out of the
+  user's window on every note. A crop on screen marks just the pieces it
+  overlaps (see markInCrop); the full-page fallback, which flinches anyway,
+  still hides everything.
 */
 export const WITHOUT_CHROME = '[data-ayna] { visibility: hidden !important; }';
+const WITHOUT_MARKED = '[data-ayna-crop] { visibility: hidden !important; }';
+
+/** Mark ayna's elements that overlap a viewport clip, and nothing else. */
+async function markInCrop(page, clip) {
+  const marked = await page
+    .evaluate((c) => {
+      for (const el of document.querySelectorAll('[data-ayna-crop]')) el.removeAttribute('data-ayna-crop');
+      for (const el of document.querySelectorAll('[data-ayna]')) {
+        const r = el.getBoundingClientRect();
+        const overlaps = r.right > c.x && r.left < c.x + c.width && r.bottom > c.y && r.top < c.y + c.height;
+        if (r.width && r.height && overlaps) el.setAttribute('data-ayna-crop', '');
+      }
+      return true;
+    }, clip)
+    .catch(() => false);
+  return marked ? WITHOUT_MARKED : WITHOUT_CHROME;
+}
 
 export async function cropRegion(page, rect, pad) {
   const clip = {
@@ -58,7 +82,14 @@ export async function cropRegion(page, rect, pad) {
   };
 
   const view = await page
-    .evaluate(() => ({ x: scrollX, y: scrollY, w: innerWidth, h: innerHeight }))
+    .evaluate(() => {
+      const css = getComputedStyle(document.documentElement);
+      const inset = (name) => parseFloat(css.getPropertyValue(name)) || 0;
+      return {
+        x: scrollX, y: scrollY, w: innerWidth, h: innerHeight,
+        top: inset('--ayna-inset-top'), left: inset('--ayna-inset-left'), bottom: inset('--ayna-inset-bottom'),
+      };
+    })
     .catch(() => null);
 
   if (view) {
@@ -70,20 +101,24 @@ export async function cropRegion(page, rect, pad) {
     const y = rect.y - view.y;
     const visible = x >= 0 && y >= 0 && x + rect.width <= view.w && y + rect.height <= view.h;
     if (visible) {
-      const left = Math.max(0, x - pad);
-      const top = Math.max(0, y - pad);
-      return {
-        clip: {
-          x: left,
-          y: top,
-          width: Math.max(8, Math.min(view.w, x + rect.width + pad) - left),
-          height: Math.max(8, Math.min(view.h, y + rect.height + pad) - top),
-        },
-        fullPage: false,
+      // A region inside the app's own area is padded only up to that area's
+      // edge, so the bar and the rail beside it are never in the crop and never
+      // need hiding. One already under them keeps the viewport's edges.
+      const app = { left: view.left, top: view.top, right: view.w, bottom: view.h - view.bottom };
+      const inApp = x >= app.left && y >= app.top && x + rect.width <= app.right && y + rect.height <= app.bottom;
+      const edge = inApp ? app : { left: 0, top: 0, right: view.w, bottom: view.h };
+      const left = Math.max(edge.left, x - pad);
+      const top = Math.max(edge.top, y - pad);
+      const onScreen = {
+        x: left,
+        y: top,
+        width: Math.max(8, Math.min(edge.right, x + rect.width + pad) - left),
+        height: Math.max(8, Math.min(edge.bottom, y + rect.height + pad) - top),
       };
+      return { clip: onScreen, fullPage: false, style: await markInCrop(page, onScreen) };
     }
   }
-  return { clip, fullPage: true };
+  return { clip, fullPage: true, style: WITHOUT_CHROME };
 }
 
 /**
@@ -326,7 +361,7 @@ export async function runAnnotate({
     // Crop the exact region the user pointed at, with a little breathing room.
     const regionFile = path.join(dir, 'region.png');
     try {
-      await page.screenshot({ path: regionFile, style: WITHOUT_CHROME, ...(await cropRegion(page, payload.rect, 12)) });
+      await page.screenshot({ path: regionFile, ...(await cropRegion(page, payload.rect, 12)) });
     } catch {
       // An off-screen or zero-size target just means no crop; the comment still stands.
     }
@@ -965,7 +1000,7 @@ export async function runAnnotate({
   */
   await page.exposeFunction('__aynaPreview', async (rect) => {
     try {
-      const buf = await page.screenshot({ style: WITHOUT_CHROME, ...(await cropRegion(page, rect, 8)) });
+      const buf = await page.screenshot(await cropRegion(page, rect, 8));
       return 'data:image/png;base64,' + buf.toString('base64');
     } catch {
       return null;
