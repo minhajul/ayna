@@ -2312,6 +2312,11 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
                 .map((n) => n.querySelector('span').textContent + ' | ' + (n.querySelector('small')?.textContent ?? ''))
                 .find((l) => l.startsWith('filed by the CLI')),
             );
+            seen.outsideBy = await page.evaluate(() =>
+              [...document.querySelectorAll('.ayna-ov-item')]
+                .find((n) => n.querySelector('span').textContent === 'filed by the CLI')
+                ?.querySelector('b').textContent,
+            );
 
             // Only the note written here is judged: the carried one still waits.
             await page.evaluate(() => window.__aynaResolve(2, 'approved'));
@@ -2325,6 +2330,7 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
         });
 
         assert.equal(seen.outside, 'filed by the CLI | filed outside this window · in Tasks');
+        assert.equal(seen.outsideBy, 'You', "the user's own note is not signed by the checker");
         assert.deepEqual(seen.half, { cards: 1, pill: 'Your turn', carried: 'Also sends 1 earlier note' });
         assert.equal(seen.all.pill, 'Approved');
       } finally {

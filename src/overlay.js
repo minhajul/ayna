@@ -3840,10 +3840,11 @@
       */
       noteOfTask.set(e.taskId, e.comment);
       if (myTab && e.tabId !== myTab) {
-        const row = item({
-          who: e.source === 'claude' ? 'Claude' : 'ayna', lane: e.source === 'claude' ? 'claude' : 'ayna',
-          text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks',
-        });
+        // Signed by whoever wrote it. A note with no source is the user's own —
+        // from another window, the CLI or an import — not the checker's.
+        const [who, lane] =
+          e.source === 'claude' ? ['Claude', 'claude'] : e.source && e.source !== 'user' ? ['ayna', 'ayna'] : ['You', 'you'];
+        const row = item({ who, lane, text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks' });
         if (last) addToCard(last, row);
         else lines.appendChild(row);
         return true;
@@ -3952,9 +3953,16 @@
 
     const row = consoleLine(e);
     if (!row) return false;
+    /*
+      A card holds its own round's steps and nothing else. A message, an audit
+      or a preview is said to the window, and inside the last card it folded
+      away with that card — by hand, or by itself the moment the next round
+      began — before anyone had read it.
+    */
+    const owner = e.event === 'claimed' ? cardOfTask.get(e.taskId) : null;
+    const parent = owner ? owner.body : lines;
     // A message to the same speaker as the line before it is a new paragraph,
     // not a new header.
-    const parent = e.event === 'closed' || !last ? lines : last.body;
     const prev = parent.lastElementChild;
     if (
       !('step' in row.dataset) &&

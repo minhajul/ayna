@@ -572,7 +572,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     window and a terminal at once and the person who wanted to stay on the page
     kept having to leave it. Same stream, on the page, both directions.
   */
-  async function withConsole(run) {
+  async function withConsole(run, { store = true } = {}) {
     const { srv, url } = await pollingServer('<h1 class="t">Hello</h1><div style="height:1200px"></div>');
     const dir = await mkdtemp(path.join(tmpdir(), 'ayna-console-'));
     try {
@@ -581,7 +581,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
         url,
         outDir: path.join(dir, 'out'),
         projectDir: dir,
-        store: await openStore(dir),
+        store: store ? await openStore(dir) : undefined,
         viewport: { width: 1200, height: 800 },
         onReady: async (page) => {
           await page.waitForTimeout(900);
@@ -676,6 +676,74 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.equal(judged.lines.at(-1), 'You: Approved');
     // Nothing speaks in ids or code names.
     assert.doesNotMatch(judged.lines.join(' '), /task-\d|lowContrast|smallTargets/);
+  });
+
+  test('a window with no task store still draws its notes and settles its round', async () => {
+    let judged = null;
+    await withConsole(
+      async (page, dir) => {
+        await page.click('.t');
+        await page.waitForSelector('.ayna-ov-pop textarea');
+        await page.fill('.ayna-ov-pop textarea', 'make it bigger');
+        await page.click('.ayna-ov-save');
+        await page.waitForTimeout(400);
+        await page.click('[data-act=send]');
+        await page.waitForTimeout(600);
+        await writeFile(path.join(dir, 'out', 'applied'), '1');
+        await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+        await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+        await page.waitForTimeout(1300);
+        judged = await page.evaluate(() => {
+          const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
+          return {
+            pill: c.querySelector('.ayna-ov-pill').textContent,
+            lines: [...c.querySelectorAll('.ayna-ov-item')].map(
+              (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
+            ),
+          };
+        });
+      },
+      { store: false },
+    );
+    assert.equal(judged.pill, 'Approved', 'the last approval settles the round without a store too');
+    assert.ok(judged.lines.includes('You: make it bigger'), judged.lines.join(' | '));
+  });
+
+  test('a message is never folded away inside a round', async () => {
+    let seen = null;
+    await withConsole(async (page, dir) => {
+      const note = async (text) => {
+        await page.click('.t');
+        await page.waitForSelector('.ayna-ov-pop textarea');
+        await page.fill('.ayna-ov-pop textarea', text);
+        await page.click('.ayna-ov-save');
+        await page.waitForTimeout(400);
+      };
+      await note('make it bigger');
+      await page.click('[data-act=send]');
+      await page.waitForTimeout(600);
+      await writeFile(path.join(dir, 'out', 'applied'), '1');
+      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      const { appendEvent, openDb } = await import('../src/db.mjs');
+      appendEvent(await openDb(dir), { event: 'message', from: 'claude', text: 'tidied the spacing too' });
+      await page.waitForTimeout(1500);
+
+      // The next round begins, and the approved one folds by itself.
+      await page.click('[data-act=more]');
+      await page.waitForTimeout(400);
+      await note('and bolder');
+      await page.waitForTimeout(1300);
+      seen = await page.evaluate(() => {
+        const line = [...document.querySelectorAll('.ayna-ov-line')].find((n) => n.textContent.includes('tidied the spacing too'));
+        return {
+          folded: document.querySelector('.ayna-ov-round').hasAttribute('data-folded'),
+          inCard: Boolean(line?.closest('.ayna-ov-round')),
+          shown: Boolean(line && line.getClientRects().length),
+        };
+      });
+    });
+    assert.deepEqual(seen, { folded: true, inCard: false, shown: true });
   });
 
   test('a finished round folds when the next one starts, and opens again on a click', async () => {

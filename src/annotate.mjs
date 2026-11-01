@@ -459,6 +459,7 @@ export async function runAnnotate({
     }
 
     comments.push(record);
+    mirrorTask(record, { status: 'open', url: record.url, comment: record.comment });
     await writeFile(path.join(dir, 'comment.json'), JSON.stringify(record, null, 2));
     return { ok: true, n, id: record.id };
   });
@@ -548,6 +549,18 @@ export async function runAnnotate({
   const pushFeed = (e) => {
     feed.push({ seq: feed.length + 1, at: Date.now(), ...e });
     if (feed.length > 500) feed.shift();
+  };
+  /*
+    With no database the rail reads only this mirror, and the store's task
+    events — which put a note in its round and settle the round once every note
+    is judged — never reach it. A round there stayed "Your turn" after the last
+    approval. So the window writes those events into the mirror itself, under
+    an id of its own for each note.
+  */
+  const mirrorOnly = !store?.db;
+  const noteKey = (c) => c.taskId ?? (mirrorOnly ? `note-${c.id}` : null);
+  const mirrorTask = (c, fields) => {
+    if (mirrorOnly) pushFeed({ event: 'task', taskId: noteKey(c), tabId: null, ...fields });
   };
   /*
     One data path.
@@ -721,8 +734,8 @@ export async function runAnnotate({
         // Which notes this round carries, including ones from earlier windows, so
         // the round is not called approved while any of them is still unjudged.
         notes: comments
-          .filter((c) => c.status !== 'approved' && c.taskId)
-          .map((c) => ({ taskId: c.taskId, comment: c.comment })),
+          .filter((c) => c.status !== 'approved' && noteKey(c))
+          .map((c) => ({ taskId: noteKey(c), comment: c.comment })),
         commentsFile,
         action: 'read-comments',
       });
@@ -824,6 +837,7 @@ export async function runAnnotate({
       c.status = 'open';
       c.rounds.push({ round: n, status: 'open', via: 'undo' });
       if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, `round ${n} undone`, { tabId });
+      mirrorTask(c, { status: 'open' });
     }
     await writeManifest();
     await writeStatus();
@@ -1075,6 +1089,7 @@ export async function runAnnotate({
     c.status = status;
     c.rounds.push({ round, status });
     if (store && c.taskId) await store.update(c.taskId, { status }, undefined, { tabId });
+    mirrorTask(c, { status });
     await writeManifest();
     await writeStatus();
     if (status === 'rejected') {
