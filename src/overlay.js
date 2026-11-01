@@ -14,6 +14,18 @@
   window.__aynaLoaded = true;
 
   const NS = 'ayna-ov';
+  /*
+    The bar's left end. On a narrow window the Activity button stands in for
+    the name; written with the drawer's current state, because each phase
+    rebuilds the bar's markup.
+  */
+  const brand = () =>
+    '<button data-act="activity" class="' + NS + '-ghost" aria-label="Activity" aria-expanded="' +
+    String(drawerOpen) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' +
+    '<span class="' + NS + '-activity-dot"></span></button>' +
+    '<span class="' + NS + '-brand">ayna</span>';
   // The Tasks button's face: an icon that stays, and a word that gives way when
   // the bar is short of room.
   const TASKS_FACE =
@@ -66,6 +78,10 @@
   let hl = null;
   let bar = null;
   let tag = null;
+  // The narrow-window drawer. Up here, not beside its functions: the bar is
+  // drawn — and reads drawerOpen — long before execution reaches them.
+  let scrim = null;
+  let drawerOpen = false;
 
   function start() {
   const css = document.createElement('style');
@@ -234,32 +250,34 @@
     }
     .${NS}-grip:hover::after, .${NS}-grip.${NS}-dragging::after { background: var(--ayna-accent, #de9446); }
     .${NS}-console.${NS}-min .${NS}-grip { display: none; }
-    /* The drawer's button and backdrop exist only on a narrow window. */
-    .${NS}-fab, .${NS}-scrim { display: none; }
-    .${NS}-fab {
-      position: fixed; left: 16px; bottom: 16px; z-index: 2147483645;
-      align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; cursor: pointer;
-      background: var(--ayna-bar, #0d0d0f); color: var(--ayna-text, #f4f2ef);
-      border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
-      box-shadow: 0 6px 18px rgba(0,0,0,.35);
-      font: 600 13px/1 -apple-system, system-ui, sans-serif;
+    /*
+      The drawer opens from the bar's own left end, where the rail lives on a
+      wide window — not from a button floating over the page. A floating button
+      sat on whatever the app keeps at its bottom edge, which on a phone layout
+      is its tab bar or its sticky call to action: ayna covering the app, the one
+      thing the bar was moved to the top to stop doing.
+
+      The status is a dot, not words: the bar already says "waiting" or
+      "1 left to judge"; the dot only says the drawer has news.
+    */
+    .${NS}-bar [data-act=activity] { display: none; position: relative; width: 36px; padding: 0; justify-content: center; }
+    .${NS}-activity-dot {
+      position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
+      display: none; box-shadow: 0 0 0 2px var(--ayna-bar, #0d0d0f);
     }
-    .${NS}-fab:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: 2px; }
-    .${NS}-fab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ayna-good, #7bc47f); }
-    .${NS}-fab-badge:empty { display: none; }
-    .${NS}-fab-badge {
-      padding: 3px 8px; border-radius: 999px; font-size: 11px;
-      background: color-mix(in srgb, var(--ayna-you, #e8b478) 18%, transparent); color: var(--ayna-you, #e8b478);
+    .${NS}-bar[data-activity=ready] .${NS}-activity-dot { display: block; background: var(--ayna-you, #e8b478); }
+    .${NS}-bar[data-activity=waiting] .${NS}-activity-dot {
+      display: block; background: var(--ayna-live, #e0b978); animation: ${NS}-breathe 2.4s ease-in-out infinite;
     }
-    .${NS}-fab-badge[data-state=waiting] {
-      background: color-mix(in srgb, var(--ayna-live, #e0b978) 14%, transparent); color: var(--ayna-live, #e0b978);
-    }
+    .${NS}-bar[data-drawer=open] [data-act=activity] { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.24); }
+    .${NS}-scrim { display: none; }
     /* Above the review markers, which otherwise show through it at full strength. */
     .${NS}-scrim { position: fixed; inset: 0; z-index: 2147483647; background: rgba(0,0,0,.45); }
     /*
-      Narrow: no column, a drawer over the page. --ayna-rail-inset is what the
-      page's inset falls back to, so zeroing it here hands the page its full
-      width with no script, at every frame of a resize.
+      Narrow: no column, a drawer over the page, under the bar, from the left.
+      --ayna-rail-inset is what the page's inset falls back to, so zeroing it
+      here hands the page its full width with no script, at every frame of a
+      resize.
     */
     @media (max-width: 899px) {
       :root { --ayna-rail-inset: 0px; }
@@ -271,18 +289,12 @@
         box-shadow: 12px 0 32px rgba(0,0,0,.45);
       }
       .${NS}-console .${NS}-grip { display: none; }
-      .${NS}-fab { display: inline-flex; }
-      .${NS}-fab.${NS}-open { display: none; }
+      .${NS}-bar [data-act=activity] { display: inline-flex; }
+      .${NS}-bar .${NS}-brand { display: none; }
       .${NS}-scrim.${NS}-open { display: block; top: var(--ayna-bar-h, 52px); }
     }
-    /* A phone: the sheet comes up from the bottom, full width, and so does the comment box. */
+    /* A phone: the comment box is a sheet along the bottom, the element still in view above it. */
     @media (max-width: 599px) {
-      .${NS}-console.${NS}-open {
-        top: auto; right: 0; width: auto; height: min(78vh, 640px);
-        border-right: 0; border-top: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
-        border-radius: 14px 14px 0 0; box-shadow: 0 -12px 32px rgba(0,0,0,.45);
-      }
-      .${NS}-console.${NS}-open .${NS}-console-head { border-radius: 14px 14px 0 0; }
       .${NS}-pop {
         left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important;
         width: auto !important; max-width: none !important;
@@ -298,7 +310,7 @@
       .${NS}-modes button { height: 40px; min-width: 44px; justify-content: center; }
       .${NS}-console-head { min-height: 60px; }
       .${NS}-round-head { min-height: 44px; }
-      .${NS}-fab { height: 44px; }
+      .${NS}-bar [data-act=activity] { width: 44px; }
     }
     .${NS}-console-head {
       display: flex; align-items: center; align-content: center; gap: 7px; padding: 8px 14px; flex-wrap: wrap;
@@ -1026,6 +1038,10 @@
   bar.className = NS + '-bar';
   bar.setAttribute('data-ayna', '1');
   document.documentElement.appendChild(bar);
+  // Listened for on the bar, which outlives the markup each phase rebuilds.
+  bar.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-act=activity]')) setDrawer(!drawerOpen);
+  });
 
   // Start out of the way on a sign-in screen: there is nothing to review until
   // the user is through it, and every click would otherwise become a comment.
@@ -1141,7 +1157,7 @@
       */
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-hint">' + HINT[state.mode] + '</span>' +
         '</div>' +
         '<div class="' + NS + '-modes" role="group" aria-label="Mode">' +
@@ -1196,7 +1212,7 @@
       */
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-spin" aria-hidden="true"></span>' +
           '<span class="' + NS + '-waiting ' + NS + '-hint">Sent — waiting for Claude to pick this up…</span>' +
         '</div>' +
@@ -1241,7 +1257,7 @@
     */
     bar.innerHTML =
       '<div class="' + NS + '-barside">' +
-        '<span class="' + NS + '-brand">ayna</span>' +
+        brand() +
         '<span class="' + NS + '-hint">Changes are live — judge each one</span>' +
       '</div>' +
       '<div class="' + NS + '-progress ' + NS + '-count"></div>' +
@@ -1302,7 +1318,7 @@
       closing = true;
       bar.innerHTML =
         '<div class="' + NS + '-barside">' +
-          '<span class="' + NS + '-brand">ayna</span>' +
+          brand() +
           '<span class="' + NS + '-hint">Closing the review — anything unjudged stays waiting</span>' +
         '</div>' +
         '<div class="' + NS + '-barside ' + NS + '-baractions">' +
@@ -3574,7 +3590,7 @@
     card.el.querySelector('b').textContent = card.round ? 'Round ' + card.round : 'Next round';
     if (at) card.el.querySelector('.' + NS + '-at').textContent = card.lastAt = clock(at);
     card.el.querySelector('.' + NS + '-pill').textContent = CARD_STATE[state];
-    updateFab();
+    updateActivity();
     if (card.head) {
       setFold(card, card.folded);
       foldSettled();
@@ -3944,43 +3960,34 @@
   */
   const NARROW = '(max-width: 899px)';
   const isNarrow = () => Boolean(window.matchMedia && window.matchMedia(NARROW).matches);
-  let fab = null;
-  let scrim = null;
-
   function buildDrawer() {
-    if (fab) return;
-    fab = document.createElement('button');
-    fab.className = NS + '-fab';
-    fab.setAttribute('data-ayna', '1');
-    fab.setAttribute('aria-expanded', 'false');
-    fab.innerHTML =
-      '<span class="' + NS + '-fab-dot"></span><span>Activity</span><span class="' + NS + '-fab-badge"></span>';
-    fab.addEventListener('click', () => setDrawer(true));
+    if (scrim) return;
     scrim = document.createElement('div');
     scrim.className = NS + '-scrim';
     scrim.setAttribute('data-ayna', '1');
     scrim.addEventListener('click', () => setDrawer(false));
     // Same layer as the drawer, so order decides: the backdrop goes just before it.
     document.documentElement.insertBefore(scrim, consoleEl);
-    document.documentElement.appendChild(fab);
   }
 
   function setDrawer(open) {
     if (!consoleEl) return;
-    // A spine has no room for the log; the sheet is always the full rail.
+    drawerOpen = open;
+    // A spine has no room for the log; the drawer is always the full rail.
     if (open && consoleMin) setConsoleMinimised(false);
-    for (const el of [consoleEl, scrim, fab]) el?.classList.toggle(NS + '-open', open);
-    fab?.setAttribute('aria-expanded', String(open));
+    for (const el of [consoleEl, scrim]) el?.classList.toggle(NS + '-open', open);
+    if (bar) bar.dataset.drawer = open ? 'open' : '';
+    bar?.querySelector('[data-act=activity]')?.setAttribute('aria-expanded', String(open));
     if (open) pumpConsole();
   }
 
-  /** The button's badge: whose move it is, when that is anyone's. */
-  function updateFab() {
-    const badge = fab?.querySelector('.' + NS + '-fab-badge');
-    if (!badge) return;
+  /** The Activity button's dot: whose move it is, when that is anyone's. */
+  function updateActivity() {
+    if (!bar) return;
     const state = cards.at(-1)?.state;
-    badge.textContent = state === 'ready' ? 'Your turn' : state === 'waiting' ? 'Working' : '';
-    badge.dataset.state = state ?? '';
+    bar.dataset.activity = state === 'ready' || state === 'waiting' ? state : '';
+    const label = { ready: 'Activity — your turn', waiting: 'Activity — Claude is working' }[state] ?? 'Activity';
+    bar.querySelector('[data-act=activity]')?.setAttribute('aria-label', label);
   }
 
   function setConsoleMinimised(min) {
