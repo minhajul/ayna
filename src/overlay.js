@@ -312,20 +312,13 @@
       }
     }
     /*
-      A finger, not a cursor: 44px targets, the size ayna itself flags anything
-      under on everyone else's page.
+      As tall as the bar, measured rather than restated: the bar grows for a
+      finger and for a long review, and a fixed number here left the two bottom
+      edges a step apart whenever it did.
     */
-    @media (pointer: coarse) {
-      .${NS}-bar { min-height: 60px; }
-      .${NS}-bar button { height: 44px; }
-      .${NS}-modes button { height: 40px; min-width: 44px; justify-content: center; }
-      .${NS}-console-head { min-height: 60px; }
-      .${NS}-round-head { min-height: 44px; }
-      .${NS}-bar [data-act=activity] { width: 44px; }
-    }
     .${NS}-console-head {
       display: flex; align-items: center; align-content: center; gap: 7px; padding: 8px 14px; flex-wrap: wrap;
-      min-height: 52px; box-sizing: border-box;
+      min-height: var(--ayna-bar-h, 52px); box-sizing: border-box;
       border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075)); flex: none;
       font: 600 12px/1.4 -apple-system, system-ui, sans-serif;
     }
@@ -1039,6 +1032,19 @@
     .${NS}-pin i { font-style: normal; display: none; }
     .${NS}-pin:hover b { display: none; }
     .${NS}-pin:hover i { display: inline; }
+    /*
+      A finger, not a cursor: 44px targets, the size ayna itself flags anything
+      under on everyone else's page. Last in the sheet on purpose: these match
+      the base rules' specificity, so written above them they lost on source
+      order and a phone kept the 32px buttons.
+    */
+    @media (pointer: coarse) {
+      .${NS}-bar { min-height: 60px; }
+      .${NS}-bar button { height: 44px; }
+      .${NS}-modes button { height: 44px; min-width: 44px; justify-content: center; }
+      .${NS}-round-head { min-height: 44px; }
+      .${NS}-bar [data-act=activity] { width: 44px; }
+    }
   `;
   document.documentElement.appendChild(css);
 
@@ -1715,6 +1721,11 @@
         }
       }
       if (e.key === 'Escape') {
+        // The ⋯ menu and the drawer sit on top of everything else, so they go first.
+        if (closeLayers()) {
+          e.preventDefault();
+          return;
+        }
         // Let the page's own field handle Escape if that is where focus is.
         if (isFormField(document.activeElement) && !pop) return;
         closePopover();
@@ -4008,6 +4019,35 @@
     bar?.querySelector('[data-act=activity]')?.setAttribute('aria-expanded', String(open));
     if (open) pumpConsole();
   }
+
+  /*
+    The ⋯ menu and the drawer close the way any menu does: Escape, or a press
+    anywhere outside them. Only their own buttons closed them, so a menu opened
+    on a narrow bar stayed over the page while the user went back to judging it.
+  */
+  function closeLayers() {
+    const menu = bar?.querySelector('.' + NS + '-overflow.' + NS + '-open');
+    if (menu) {
+      menu.classList.remove(NS + '-open');
+      bar.querySelector('[data-act=overflow]')?.setAttribute('aria-expanded', 'false');
+      return true;
+    }
+    if (drawerOpen) {
+      setDrawer(false);
+      bar?.querySelector('[data-act=activity]')?.focus();
+      return true;
+    }
+    return false;
+  }
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      const menu = bar?.querySelector('.' + NS + '-overflow.' + NS + '-open');
+      if (!menu || menu.contains(e.target) || e.target.closest?.('[data-act=overflow]')) return;
+      closeLayers();
+    },
+    true,
+  );
 
   /** The Activity button's dot: whose move it is, when that is anyone's. */
   function updateActivity() {

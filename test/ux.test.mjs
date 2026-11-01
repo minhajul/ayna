@@ -1268,6 +1268,13 @@ describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' 
           await page.click('[data-act=overflow]');
           seen.menuAfter = await visible('[data-act=approve-all]');
           await page.click('[data-act=overflow]');
+          // Closed like any menu: a press anywhere else, or Escape.
+          await page.click('[data-act=overflow]');
+          await page.mouse.click(200, 700);
+          seen.menuOutside = await visible('[data-act=approve-all]');
+          await page.click('[data-act=overflow]');
+          await page.keyboard.press('Escape');
+          seen.menuEscape = await visible('[data-act=approve-all]');
 
           seen.dot = await page.evaluate(() => getComputedStyle(document.querySelector('.ayna-ov-activity-dot')).display);
           await page.click('.ayna-ov-bar [data-act=activity]');
@@ -1289,6 +1296,11 @@ describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' 
           await page.mouse.click(380, 400); // the backdrop, beside the drawer
           await page.waitForTimeout(300);
           seen.closed = await page.evaluate(() => getComputedStyle(document.querySelector('.ayna-ov-console')).display);
+          await page.click('.ayna-ov-bar [data-act=activity]');
+          await page.waitForTimeout(300);
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(300);
+          seen.escaped = await page.evaluate(() => getComputedStyle(document.querySelector('.ayna-ov-console')).display);
           await page.close();
         },
       });
@@ -1310,5 +1322,7 @@ describe('a phone-sized window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' 
     assert.equal(seen.sheet.rounds, 1);
     assert.notEqual(seen.sheet.markerCovered, false, 'a review marker shows through the backdrop');
     assert.equal(seen.closed, 'none', 'tapping the backdrop closes the sheet');
+    assert.deepEqual([seen.menuOutside, seen.menuEscape], [false, false], 'the ⋯ menu closes on a press elsewhere and on Escape');
+    assert.equal(seen.escaped, 'none', 'Escape closes the drawer');
   });
 });

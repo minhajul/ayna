@@ -535,6 +535,46 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
     }
   });
 
+  test('on a touch screen every bar control is finger-sized, and the rail header meets the bar', async () => {
+    const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1></main>');
+    const dir = await mkdtemp(path.join(tmpdir(), 'ayna-touch-'));
+    // hasTouch is what makes `(pointer: coarse)` match in Chrome.
+    const context = await browser.newContext({ viewport: { width: 1200, height: 820 }, hasTouch: true });
+    try {
+      let seen = null;
+      await runAnnotate({
+        browser,
+        context,
+        url,
+        theme: DEFAULT_THEME,
+        outDir: path.join(dir, 'out'),
+        projectDir: dir,
+        onReady: async (page) => {
+          await page.waitForSelector('.ayna-ov-modes button');
+          seen = await page.evaluate(() => ({
+            coarse: matchMedia('(pointer: coarse)').matches,
+            short: [...document.querySelectorAll('.ayna-ov-bar button')]
+              .filter((b) => b.getClientRects().length)
+              .map((b) => [b.dataset.act || b.dataset.mode || b.textContent.trim(), Math.round(b.getBoundingClientRect().height)])
+              .filter(([, h]) => h < 44),
+            modes: Math.round(document.querySelector('.ayna-ov-modes').getBoundingClientRect().height),
+            bar: Math.round(document.querySelector('.ayna-ov-bar').getBoundingClientRect().bottom),
+            head: Math.round(document.querySelector('.ayna-ov-console-head').getBoundingClientRect().bottom),
+          }));
+          await page.close();
+        },
+      });
+      assert.equal(seen.coarse, true, 'the fixture must actually be a touch screen');
+      assert.deepEqual(seen.short, [], 'a bar control under 44px on a touch screen');
+      assert.ok(seen.modes >= 44, `the mode switcher is ${seen.modes}px tall`);
+      assert.equal(seen.head, seen.bar, "the rail's header ends on the bar's bottom edge");
+    } finally {
+      await context.close().catch(() => {});
+      srv.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("the comment box's hint sits on its buttons' line", async () => {
     const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1></main>');
     const dir = await mkdtemp(path.join(tmpdir(), 'ayna-hintline-'));
