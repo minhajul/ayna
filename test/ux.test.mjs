@@ -626,6 +626,135 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.ok(lines.includes('you:make it wider too'), 'the reply typed on the page was lost');
   });
 
+  test('a round is one card that says whose move it is', async () => {
+    const seen = [];
+    await withConsole(async (page, dir) => {
+      const card = () =>
+        page.evaluate(() => {
+          const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
+          return c && {
+            title: c.querySelector('.ayna-ov-round-head b').textContent,
+            pill: c.querySelector('.ayna-ov-pill').textContent,
+            lines: [...c.querySelectorAll('.ayna-ov-item')].map(
+              (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
+            ),
+            cards: document.querySelectorAll('.ayna-ov-round').length,
+          };
+        });
+
+      await page.click('.t');
+      await page.waitForSelector('.ayna-ov-pop textarea');
+      await page.fill('.ayna-ov-pop textarea', 'make it bigger');
+      await page.click('.ayna-ov-save');
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+
+      await page.click('[data-act=send]');
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+
+      await writeFile(path.join(dir, 'out', 'applied'), '1');
+      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+      await page.waitForTimeout(1500);
+      seen.push(await card());
+
+      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+    });
+
+    const [drafting, sent, landed, judged] = seen;
+    // The note sits under its round from the start, not above a header drawn later.
+    assert.deepEqual(drafting, { title: 'Next round', pill: 'Not sent yet', lines: ['You: make it bigger'], cards: 1 });
+    assert.equal(sent.title, 'Round 1');
+    assert.equal(sent.pill, 'Claude is working');
+    assert.equal(sent.cards, 1, 'sending turns the draft into the round, it does not add a second card');
+    assert.equal(landed.pill, 'Your turn');
+    assert.ok(landed.lines.includes('Claude: Finished'), landed.lines.join(' | '));
+    assert.ok(landed.lines.some((l) => l.startsWith('ayna: ')), 'the check is signed by ayna, not by Claude');
+    assert.equal(judged.pill, 'Approved');
+    assert.equal(judged.lines.at(-1), 'You: Approved');
+    // Nothing speaks in ids or code names.
+    assert.doesNotMatch(judged.lines.join(' '), /task-\d|lowContrast|smallTargets/);
+  });
+
+  test('a finished round folds when the next one starts, and opens again on a click', async () => {
+    const seen = {};
+    await withConsole(async (page, dir) => {
+      const rounds = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll('.ayna-ov-round')].map((c) => ({
+            title: c.querySelector('.ayna-ov-round-head b').textContent,
+            folded: c.hasAttribute('data-folded'),
+            expanded: c.querySelector('.ayna-ov-round-head').getAttribute('aria-expanded'),
+            sum: c.querySelector('.ayna-ov-round-sum').textContent,
+          })),
+        );
+      const note = async (text) => {
+        await page.click('.t');
+        await page.waitForSelector('.ayna-ov-pop textarea');
+        await page.fill('.ayna-ov-pop textarea', text);
+        await page.click('.ayna-ov-save');
+        await page.waitForTimeout(400);
+      };
+
+      await note('make it bigger');
+      await page.click('[data-act=send]');
+      await page.waitForTimeout(600);
+      await writeFile(path.join(dir, 'out', 'applied'), '1');
+      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await page.waitForTimeout(1300);
+      seen.judged = await rounds();
+
+      // The next round begins: the approved one gets out of the way.
+      await page.click('[data-act=more]');
+      await page.waitForTimeout(400);
+      await note('and bolder');
+      await page.waitForTimeout(1300);
+      seen.next = await rounds();
+
+      await page.click('.ayna-ov-round-head');
+      seen.clicked = (await rounds())[0];
+      await page.focus('.ayna-ov-round-head');
+      await page.keyboard.press('Enter');
+      seen.keyed = (await rounds())[0];
+
+      // Opened by hand, it stays open through a reload.
+      await page.click('.ayna-ov-round-head');
+      await page.reload();
+      await page.waitForSelector('.ayna-ov-round', { timeout: 10000 });
+      await page.waitForTimeout(1500);
+      seen.reloaded = (await rounds())[0];
+    });
+
+    assert.equal(seen.judged.length, 1);
+    assert.equal(seen.judged[0].folded, false, 'the only round is never folded away');
+    assert.deepEqual(
+      seen.next.map((r) => [r.title, r.folded]),
+      [['Round 1', true], ['Next round', false]],
+    );
+    assert.equal(seen.next[0].sum, '1 note', 'folded, it still says what it held');
+    assert.equal(seen.next[0].expanded, 'false');
+    assert.equal(seen.clicked.folded, false);
+    assert.equal(seen.keyed.folded, true, 'Enter on the header folds it, like a click');
+    assert.equal(seen.reloaded.folded, false);
+  });
+
+  test('everything in the rail starts on one edge', async () => {
+    let edges = null;
+    await withConsole(async (page) => {
+      edges = await page.evaluate(() => {
+        const rail = document.querySelector('.ayna-ov-console').getBoundingClientRect().left;
+        const at = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left - rail);
+        return { header: at('.ayna-ov-dotlive'), empty: at('.ayna-ov-empty-lead'), say: at('.ayna-ov-say-box') };
+      });
+    });
+    // The task panel's empty state shares a class with the rail's, and its
+    // padding once leaked in and pushed the rail's 14px further in than the rest.
+    assert.deepEqual(edges, { header: edges.header, empty: edges.header, say: edges.header });
+  });
+
   test('never covers the app, open or minimised', async () => {
     /*
       A panel that sits on top of the thing you are reviewing is not a panel.

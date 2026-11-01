@@ -89,6 +89,36 @@ describe('task store', () => {
     }
   });
 
+  test('a change is logged against the window it was made in', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const store = await openStore(dir);
+      const { openSessions } = await import('../src/sessions.mjs');
+      const sessions = await openSessions(dir, { db: store.db });
+      const sessionId = sessions.register({ tool: 'user' });
+      const monday = sessions.openTab({ url: 'http://x/', sessionId });
+      const tuesday = sessions.openTab({ url: 'http://x/', sessionId });
+
+      const t = await store.create({ comment: 'x', tabId: monday, source: 'user' });
+      assert.equal(t.tabId, monday, 'the task remembers the window it was raised in');
+
+      // Carried over and judged in a later window: the verdict belongs to that one.
+      await store.update(t.id, { status: 'approved' }, undefined, { tabId: tuesday });
+      // Not every change comes from a window — a CLI verdict is nobody's tab.
+      await store.update(t.id, { status: 'open' });
+
+      const { eventsSince } = await import('../src/db.mjs');
+      const logged = eventsSince(store.db).filter((e) => e.event === 'task');
+      assert.deepEqual(
+        logged.map((e) => [e.status, e.tabId ?? null]),
+        [['open', monday], ['approved', tuesday], ['open', null]],
+      );
+      assert.equal(logged[0].source, 'user', 'and who raised it, so the line can be signed');
+    } finally {
+      await dispose();
+    }
+  });
+
   test('pending work is what has not been approved', async () => {
     const { dir, dispose } = await tempDir();
     try {

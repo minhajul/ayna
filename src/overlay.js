@@ -249,7 +249,12 @@
     .${NS}-console-lines {
       overflow-y: auto; padding: 12px 14px; flex: 1 1 auto; min-height: 0;
     }
-    .${NS}-empty { padding: 4px 0 0; }
+    /*
+      Scoped to the rail. The task panel's empty state shares the class, and its
+      later rule (18px 14px) won on source order, which put everything in an
+      empty rail 14px further in than the header and the Earlier line.
+    */
+    .${NS}-console-lines > .${NS}-empty { padding: 4px 0 0; }
     .${NS}-empty p { margin: 0; }
     .${NS}-empty-lead {
       color: var(--ayna-muted, rgba(255,255,255,.62));
@@ -273,6 +278,21 @@
       color: var(--ayna-dim, rgba(255,255,255,.46));
       font: 12px/1.45 -apple-system, system-ui, sans-serif;
     }
+    /* The past, in one line: how many windows came before, and what they left open. */
+    .${NS}-earlier {
+      display: flex; align-items: center; gap: 8px; flex: none;
+      padding: 7px 14px; border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+      color: var(--ayna-dim, rgba(255,255,255,.46));
+      font: 11.5px/1.45 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-earlier[hidden], .${NS}-console.${NS}-min .${NS}-earlier { display: none; }
+    .${NS}-earlier span { flex: 1; min-width: 0; }
+    .${NS}-earlier button {
+      /* The header's Hide uses the same side padding, so the two end on one edge. */
+      flex: none; background: transparent; border: 0; padding: 1px 8px; border-radius: 6px; cursor: pointer;
+      color: var(--ayna-muted, rgba(255,255,255,.62)); font: inherit;
+    }
+    .${NS}-earlier button:hover { background: var(--ayna-line, rgba(255,255,255,.075)); color: var(--ayna-text, #f4f2ef); }
     /*
       Let a line be a line.
 
@@ -333,8 +353,7 @@
       border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075));
     }
     .${NS}-line[data-step] + .${NS}-line[data-step] { margin-top: 0; }
-    .${NS}-phase + .${NS}-line[data-step] { border-top: 0; }
-    .${NS}-line[data-step] > b {
+        .${NS}-line[data-step] > b {
       grid-area: glyph; text-align: center;
       color: var(--ayna-dim, rgba(255,255,255,.46));
       font: 600 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -352,15 +371,128 @@
     /* The gate is the answer to "is it actually fixed?" — it gets to be loud. */
     .${NS}-line[data-kind=gate][data-tone=warn] > span { color: var(--ayna-warn, #e0a458); }
 
-    .${NS}-phase {
-      display: flex; align-items: center; gap: 8px; margin: 16px 0 2px;
-      color: var(--ayna-dim, rgba(255,255,255,.46));
-      font: 500 10.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    /*
+      A round, from its first note to its verdict.
+
+      The corner says whose move it is, in the colour of whoever owes it: the
+      user's amber when it is their turn, the live pulse while Claude works.
+      Inside, every line is signed — You, Claude, ayna — in that lane's colour,
+      so a measurement never reads like an instruction.
+    */
+    .${NS}-round {
+      margin: 0 0 12px; border-radius: 10px;
+      border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
+      background: rgba(255,255,255,.025);
     }
-    .${NS}-phase::after {
-      content: ''; flex: 1; height: 1px; background: var(--ayna-line, rgba(255,255,255,.075));
+    .${NS}-round-head {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+      font: 600 12px/1.4 -apple-system, system-ui, sans-serif;
     }
-    .${NS}-phase:first-child { margin-top: 0; }
+    .${NS}-round-head .${NS}-at { font-weight: 400; }
+    .${NS}-round-head { cursor: pointer; user-select: none; border-radius: 10px 10px 0 0; }
+    .${NS}-round-head:hover { background: rgba(255,255,255,.03); }
+    .${NS}-round-head:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: -2px; }
+    .${NS}-chev {
+      flex: none; width: 6px; height: 6px; margin: 0 2px 3px 1px;
+      border-right: 1.5px solid var(--ayna-dim, rgba(255,255,255,.46));
+      border-bottom: 1.5px solid var(--ayna-dim, rgba(255,255,255,.46));
+      transform: rotate(45deg); transition: transform .15s;
+    }
+    .${NS}-round[data-folded] .${NS}-chev { transform: rotate(-45deg); margin-bottom: 0; }
+    .${NS}-round-sum {
+      display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--ayna-dim, rgba(255,255,255,.46)); font: 400 11.5px/1.4 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-round-head b, .${NS}-round-head .${NS}-at { flex: none; white-space: nowrap; }
+    .${NS}-round[data-folded] .${NS}-round-sum { display: inline; flex: 1 1 auto; }
+    /* Folded, the line is for what the round held; its time is inside. */
+    .${NS}-round[data-folded] .${NS}-round-head .${NS}-at { display: none; }
+    .${NS}-round[data-folded] .${NS}-round-head { border-bottom-color: transparent; border-radius: 10px; }
+    .${NS}-round[data-folded] .${NS}-round-body,
+    .${NS}-round[data-folded] .${NS}-round-acts { display: none; }
+    .${NS}-pill {
+      margin-left: auto; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+      border: 1px solid currentColor; color: var(--ayna-dim, rgba(255,255,255,.46));
+      font: 600 10.5px/1.5 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-round[data-state=waiting] .${NS}-pill { color: var(--ayna-live, #e0b978); animation: ${NS}-breathe 2.4s ease-in-out infinite; }
+    .${NS}-round[data-state=ready] .${NS}-pill { color: var(--ayna-you, #e8b478); }
+    .${NS}-round[data-state=approved] .${NS}-pill { color: var(--ayna-good, #7bc47f); }
+    .${NS}-round[data-state=sentback] .${NS}-pill { color: var(--ayna-warn, #e0a458); }
+    .${NS}-round[data-state=ready] { border-color: color-mix(in srgb, var(--ayna-you, #e8b478) 45%, transparent); }
+    @keyframes ${NS}-breathe { 50% { opacity: .55; } }
+    @media (prefers-reduced-motion: reduce) {
+      .${NS}-round[data-state=waiting] .${NS}-pill { animation: none; }
+    }
+    .${NS}-round-body { padding: 0 10px 4px; }
+    .${NS}-round-body:empty { display: none; }
+    .${NS}-round-note {
+      margin: 0; padding: 6px 0; color: var(--ayna-dim, rgba(255,255,255,.46));
+      font: 11.5px/1.45 -apple-system, system-ui, sans-serif;
+      border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    }
+    .${NS}-round-note:first-child { border-top: 0; }
+    .${NS}-item {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px;
+      grid-template-areas: "who at" "text text" "detail detail" "extra extra";
+      padding: 7px 0; word-break: break-word;
+      border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    }
+    .${NS}-item:first-child { border-top: 0; }
+    .${NS}-item > b { grid-area: who; font: 600 11.5px/1.5 -apple-system, system-ui, sans-serif; }
+    .${NS}-item[data-lane=you] > b { color: var(--ayna-you, #e8b478); }
+    .${NS}-item[data-lane=claude] > b { color: var(--ayna-agent, #c9a2e8); }
+    .${NS}-item[data-lane=ayna] > b { color: var(--ayna-ayna, #79d4c0); }
+    .${NS}-item > .${NS}-at { grid-area: at; align-self: center; }
+    .${NS}-item > span { grid-area: text; color: var(--ayna-text, #f4f2ef); font: 12.5px/1.45 -apple-system, system-ui, sans-serif; }
+    .${NS}-item[data-tone=good] > span { color: var(--ayna-good, #7bc47f); }
+    .${NS}-item[data-tone=warn] > span { color: var(--ayna-warn, #e0a458); }
+    .${NS}-item > small {
+      grid-area: detail; color: var(--ayna-dim, rgba(255,255,255,.46));
+      font: 11.5px/1.45 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-crop {
+      grid-area: extra; display: block; margin-top: 6px; max-width: 100%; max-height: 56px;
+      object-fit: contain; object-position: left; border-radius: 4px;
+      border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    }
+    .${NS}-round-body > .${NS}-line:first-child { border-top: 0; margin-top: 0; }
+    .${NS}-files { grid-area: extra; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+    .${NS}-file {
+      display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+      background: transparent; border: 0; border-radius: 5px; padding: 3px 6px; margin: 0 -6px;
+      color: var(--ayna-text, #f4f2ef); font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .${NS}-file:hover { background: var(--ayna-line, rgba(255,255,255,.075)); }
+    .${NS}-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .${NS}-file em { flex: none; font-style: normal; color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-file ins { text-decoration: none; color: var(--ayna-good, #7bc47f); margin-left: 6px; }
+    .${NS}-file del { text-decoration: none; color: var(--ayna-bad, #e0685f); margin-left: 6px; }
+    .${NS}-diff {
+      margin: 2px 0 6px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,.35);
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap; word-break: break-all; color: var(--ayna-muted, rgba(255,255,255,.62));
+    }
+    .${NS}-diff [data-t="+"] { color: var(--ayna-good, #7bc47f); }
+    .${NS}-diff [data-t="-"] { color: var(--ayna-bad, #e0685f); }
+    .${NS}-diff [data-t="…"] { color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-file.${NS}-gone span { text-decoration: line-through; color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-round[data-state=undone] .${NS}-pill { color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-round-acts {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px;
+      border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    }
+    .${NS}-round-acts button {
+      background: transparent; cursor: pointer; border-radius: 6px; padding: 3px 9px;
+      border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
+      color: var(--ayna-muted, rgba(255,255,255,.62)); font: 600 11.5px/1.4 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-round-acts button:hover { color: var(--ayna-text, #f4f2ef); border-color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-round-acts button[data-act=undo-confirm] { color: var(--ayna-warn, #e0a458); border-color: currentColor; }
+    .${NS}-round-acts button:disabled { opacity: .5; cursor: default; }
+    .${NS}-round-acts span { flex: 1 1 100%; color: var(--ayna-warn, #e0a458); font: 11.5px/1.45 -apple-system, system-ui, sans-serif; }
+    .${NS}-round-acts span:empty { display: none; }
     /*
       Neon, in the sense that matters: saturated ink on near-black.
 
@@ -397,7 +529,7 @@
       the bar was the loudest thing on the rail whether or not there was
       anything to send. The arrow only lights once there is.
     */
-    .${NS}-console-say { flex: none; padding: 10px 12px 12px; border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075)); }
+    .${NS}-console-say { flex: none; padding: 10px 14px 12px; border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075)); }
     .${NS}-say-box {
       display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px;
       background: rgba(0,0,0,.32); border-radius: 10px;
@@ -2975,26 +3107,44 @@
   }
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  /*
+    What each check is called, for a person.
+
+    The rail printed the audit's own keys — "5 lowContrast · 22 smallTargets" —
+    which are names for code. These are the short forms of what SEVERITY in
+    audit.mjs says each one means, sized for a line in a narrow rail.
+  */
+  const FAULTS = {
+    covered: ['covered control', 'covered controls'],
+    offscreen: ['element off screen', 'elements off screen'],
+    overlaps: ['overlap', 'overlaps'],
+    clipped: ['text cut off', 'texts cut off'],
+    lowContrast: ['low-contrast text', 'low-contrast texts'],
+    noFocusIndicator: ['control with no focus ring', 'controls with no focus ring'],
+    faintFocusIndicator: ['faint focus ring', 'faint focus rings'],
+    unlabelled: ['unlabelled control', 'unlabelled controls'],
+    smallTargets: ['small tap target', 'small tap targets'],
+    tinyText: ['text under 12px', 'texts under 12px'],
+  };
+  const faultName = (key, n) => (FAULTS[key] ? FAULTS[key][n === 1 ? 0 : 1] : key);
   const faultList = (counts) =>
     Object.entries(counts ?? {})
       .filter(([, n]) => n > 0)
-      .map(([k, n]) => `${n} ${k}`)
+      .map(([k, n]) => `${n} ${faultName(k, n)}`)
       .join(' · ');
+  const faultTotal = (counts) => Object.values(counts ?? {}).reduce((a, b) => a + (b || 0), 0);
 
   /*
     A message is somebody's words; everything else is a step, which says what
     happened in a title and keeps the particulars for the line under it — the
     split that lets the eye run down the titles and stop only where it matters.
+
+    Rounds, notes, verdicts and checks are not here: they belong to a round and
+    are drawn inside its card (see renderEvent).
   */
   const WORDING = {
     message: (e) => ({ text: e.text }),
-    round: (e) => ({ glyph: '↑', text: 'Sent to Claude', detail: e.comments ? plural(e.comments, 'comment') : '' }),
-    applied: (e) => ({
-      glyph: '✓', tone: 'good', text: 'Changes landed',
-      detail: e.via && e.via !== 'marker' ? `noticed by ${e.via.replace('-', ' ')}` : '',
-    }),
-    task: (e) => ({ glyph: '↳', text: `${e.taskId ?? e.id ?? ''} ${e.status ?? ''}`.trim(), detail: e.comment ?? '' }),
-    rejected: (e) => ({ glyph: '↺', tone: 'warn', text: 'Sent back', detail: e.comment ?? '' }),
     closed: (e) =>
       e.approved
         ? { glyph: '✓', tone: 'good', text: 'Review finished' }
@@ -3002,24 +3152,14 @@
     audit: (e) =>
       e.clean
         ? { glyph: '✓', tone: 'good', text: 'No layout faults' }
-        : {
-            glyph: '!', tone: 'warn',
-            text: plural(Object.values(e.counts ?? {}).reduce((a, b) => a + b, 0), 'fault') + ' found',
-            detail: faultList(e.counts),
-          },
-    claimed: (e) => ({ glyph: '↳', text: `${e.taskId ?? ''} taken`.trim(), detail: `by ${e.by ?? 'someone'}` }),
+        : { glyph: '!', tone: 'warn', text: plural(faultTotal(e.counts), 'fault') + ' found', detail: faultList(e.counts) },
+    claimed: (e) => ({ glyph: '↳', text: `Taken by ${e.by ?? 'someone'}`, detail: quote(noteOfTask.get(e.taskId)) }),
     ready: (e) => ({ glyph: '•', tone: 'live', text: `${e.pending} still waiting` }),
     preview: (e) => ({ glyph: '◐', text: `${plural(e.variants?.length ?? 0, 'variant')} to try`, detail: e.selector ?? '' }),
     'preview-accepted': (e) => ({
       glyph: '✓', tone: 'good', text: `Kept ${e.label ?? 'variant ' + ((e.variant ?? 0) + 1)}`, detail: 'write it in',
     }),
     'preview-rejected': () => ({ glyph: '×', text: 'None of them', detail: 'try something else' }),
-    gate: (e) =>
-      e.unavailable
-        ? { glyph: '?', tone: 'warn', text: 'Could not measure the page', detail: e.unavailable }
-        : e.clean
-          ? { glyph: '✓', tone: 'good', text: 'No measurable faults left', detail: 're-measured after the change' }
-          : { glyph: '!', tone: 'warn', text: `${faultList(e.counts)} still there`, detail: 're-measured after the change' },
   };
 
   /*
@@ -3030,19 +3170,37 @@
     Three lanes is the honest count here. The user, Claude, and ayna — which is
     neither of them and is the only one making claims that can be checked.
   */
-  const LANE = {
-    round: 'you', message: 'you', closed: 'you',
-    task: 'claude', applied: 'claude', rejected: 'claude',
-    gate: 'ayna', audit: 'ayna', ready: 'ayna', claimed: 'ayna',
+  const LANE = { message: 'you', closed: 'you', audit: 'ayna', ready: 'ayna', claimed: 'ayna' };
+
+  /*
+    The time on the wall, not since the log began.
+
+    Elapsed time was counted from the oldest event the panel had loaded, which
+    was last week's as often as this window's, so "05:17" meant nothing anyone
+    could check against a clock.
+  */
+  const clock = (at) => new Date(at ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  /** A note, short enough to sit under a verdict without becoming the line. */
+  const quote = (text) => {
+    if (!text) return '';
+    const t = String(text).replace(/\s+/g, ' ').trim();
+    return '“' + (t.length > 64 ? t.slice(0, 63).trimEnd() + '…' : t) + '”';
   };
 
-  let consoleStart = 0;
-  let consoleRound = null;
-
-  const clock = (at) => {
-    if (!consoleStart) consoleStart = at;
-    const secs = Math.max(0, Math.round((at - consoleStart) / 1000));
-    return String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0');
+  /*
+    The page a note was made on, as its path — the origin is the same for all
+    of them. The root goes unsaid: it is where nearly every review starts, and
+    "/" under every note was noise that hid the notes that were elsewhere.
+  */
+  const pageOf = (url) => {
+    try {
+      const u = new URL(url);
+      const at = u.pathname + u.hash;
+      return at === '/' ? '' : at;
+    } catch {
+      return '';
+    }
   };
 
   function consoleLine(e) {
@@ -3060,7 +3218,7 @@
 
     const t = document.createElement('i');
     t.className = NS + '-at';
-    t.textContent = clock(e.at ?? Date.now());
+    t.textContent = clock(e.at);
 
     const b = document.createElement('b');
     if (said) {
@@ -3086,13 +3244,474 @@
     return row;
   }
 
-  /** A round is a phase; saying so makes the rest read as belonging to something. */
-  function roundHeader(e) {
-    const head = document.createElement('div');
-    head.className = NS + '-phase';
-    head.textContent = 'round ' + (e.round ?? '') +
-      (e.comments ? ' · ' + e.comments + ' comment' + (e.comments === 1 ? '' : 's') : '');
-    return head;
+  /*
+    A round is a card.
+
+    The rail was one flat list. The round header was drawn when the round was
+    sent, so the notes in it sat above their own heading; rows were named by
+    task id; and nothing said whose move it was. A card holds a round from its
+    first note to its verdict — what you asked, what Claude did, what ayna
+    measured, what you decided — and its corner says who it is waiting on.
+
+    Cards are rebuilt from the event stream whenever the overlay is, so they
+    are never state of their own: the log is the record and this is a reading
+    of it.
+  */
+  const CARD_STATE = {
+    drafting: 'Not sent yet',
+    waiting: 'Claude is working',
+    ready: 'Your turn',
+    approved: 'Approved',
+    sentback: 'Sent back',
+    undone: 'Undone',
+  };
+  const cards = [];
+  const cardOfTask = new Map();
+  const noteOfTask = new Map();
+  // This window's tab, once asked; undefined until then, null when it has none.
+  let myTab;
+
+  // Plain divs: this lives in the app's document, and an app is free to style
+  // section and header — the demo pads every section by a screen's height.
+  /*
+    A round folds to its header.
+
+    A long review is a column of finished rounds above the one that matters,
+    and scrolling past them to reach it is the cost window-scoping was there to
+    remove. So a round folds once it is settled and a newer one exists, to a
+    line that still says how it went, and any round opens again on a click.
+    One still waiting on you or on Claude never folds by itself.
+
+    A fold made by hand is remembered for the tab, keyed by the event that
+    began the round — the same on every rebuild, so a reload keeps it.
+  */
+  const SETTLED = new Set(['approved', 'sentback', 'undone']);
+  const FOLDS = 'ayna-folds';
+  const folds = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(FOLDS) || '{}');
+    } catch {
+      return {};
+    }
+  })();
+
+  function setFold(card, folded, byHand = false) {
+    // A boolean, always: toggleAttribute(name, undefined) toggles instead of clearing.
+    card.folded = Boolean(folded);
+    card.el.toggleAttribute('data-folded', card.folded);
+    card.head.setAttribute('aria-expanded', String(!card.folded));
+    const notes = card.tasks.size;
+    const files = card.files?.length ?? 0;
+    card.el.querySelector('.' + NS + '-round-sum').textContent =
+      [notes && plural(notes, 'note'), files && plural(files, 'file')].filter(Boolean).join(' · ');
+    if (!byHand) return;
+    folds[card.id] = folded;
+    try {
+      sessionStorage.setItem(FOLDS, JSON.stringify(folds));
+    } catch {
+      // Unremembered is fine; it folds again on the next rebuild.
+    }
+  }
+
+  /** Fold what is finished, unless the user has said otherwise for that round. */
+  function foldSettled() {
+    for (const c of cards.slice(0, -1)) {
+      if (!(c.id in folds) && SETTLED.has(c.state) && !c.folded) setFold(c, true);
+    }
+  }
+
+  function newCard(lines, state, id) {
+    const el = document.createElement('div');
+    el.className = NS + '-round';
+    el.innerHTML =
+      '<div class="' + NS + '-round-head" role="button" tabindex="0" aria-expanded="true">' +
+        '<span class="' + NS + '-chev" aria-hidden="true"></span><b></b><i class="' + NS + '-at"></i>' +
+        '<span class="' + NS + '-round-sum"></span><span class="' + NS + '-pill"></span>' +
+      '</div>' +
+      '<div class="' + NS + '-round-body"></div>';
+    lines.appendChild(el);
+    const card = {
+      el, head: el.querySelector('.' + NS + '-round-head'), body: el.querySelector('.' + NS + '-round-body'),
+      tasks: new Map(), raised: new Set(), round: null, state: null, lastAt: '', id: String(id ?? cards.length),
+    };
+    const toggle = () => setFold(card, !card.folded, true);
+    card.head.addEventListener('click', toggle);
+    card.head.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      // The page underneath is in comment mode, where keys are shortcuts.
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggle();
+    });
+    cards.push(card);
+    setCard(card, state);
+    setFold(card, folds[card.id] ?? false);
+    foldSettled();
+    return card;
+  }
+
+  function setCard(card, state, { round, at } = {}) {
+    card.state = state;
+    card.el.dataset.state = state;
+    if (round !== undefined) card.round = round;
+    card.el.querySelector('b').textContent = card.round ? 'Round ' + card.round : 'Next round';
+    if (at) card.el.querySelector('.' + NS + '-at').textContent = card.lastAt = clock(at);
+    card.el.querySelector('.' + NS + '-pill').textContent = CARD_STATE[state];
+    if (card.head) {
+      setFold(card, card.folded);
+      foldSettled();
+    }
+  }
+
+  /** Once every note in a round is judged, the card says how it went. */
+  function settleCard(card) {
+    if (!card || !['ready', 'sentback', 'approved'].includes(card.state)) return;
+    const verdicts = [...card.tasks.values()];
+    if (verdicts.includes('rejected')) setCard(card, 'sentback');
+    else if (verdicts.length && verdicts.every((v) => v === 'approved')) setCard(card, 'approved');
+  }
+
+  function item({ who, lane, text, detail, at, tone }) {
+    const row = document.createElement('div');
+    row.className = NS + '-item';
+    row.dataset.lane = lane;
+    if (tone) row.dataset.tone = tone;
+    const b = document.createElement('b');
+    b.textContent = who;
+    const t = document.createElement('i');
+    t.className = NS + '-at';
+    t.textContent = at ? clock(at) : '';
+    const span = document.createElement('span');
+    span.textContent = text;
+    row.append(b, t, span);
+    if (detail) {
+      const small = document.createElement('small');
+      small.textContent = detail;
+      row.appendChild(small);
+    }
+    return row;
+  }
+
+  /** The crop of what a note was about, so a card shows the thing and not only the words. */
+  function attachCrop(row, taskId) {
+    if (!taskId || !window.__aynaCrop) return;
+    window.__aynaCrop(taskId).then((src) => {
+      if (!src) return;
+      const img = document.createElement('img');
+      img.className = NS + '-crop';
+      img.alt = '';
+      img.src = src;
+      row.appendChild(img);
+    }).catch(() => {});
+  }
+
+  /*
+    Into a card, saying the time only when it moves on. A round usually happens
+    inside a few minutes, and "14:25" on every line was a column of the same
+    four digits.
+  */
+  function addToCard(card, row) {
+    const at = row.querySelector(':scope > .' + NS + '-at');
+    if (at && at.textContent === card.lastAt) at.textContent = '';
+    else if (at?.textContent) card.lastAt = at.textContent;
+    card.body.appendChild(row);
+    return row;
+  }
+
+  /*
+    What the check after a round found, against the page before it.
+
+    With a baseline the question is whether this round broke anything, and the
+    faults it found waiting are context, not a verdict on the work. Without one
+    — an older window, or the user browsed elsewhere meanwhile — it falls back
+    to the totals and says only that they are on the page.
+  */
+  function gateWords(e) {
+    if (e.unavailable) return { text: 'Could not check the page', detail: e.unavailable, tone: 'warn' };
+    const total = faultTotal(e.counts);
+    if (!e.before || !e.added) {
+      return total
+        ? { text: plural(total, 'fault') + ' on the page', detail: faultList(e.counts), tone: e.clean ? '' : 'warn' }
+        : { text: 'No layout faults', tone: 'good' };
+    }
+    const added = faultTotal(e.added);
+    const fixed = Object.entries(e.before).reduce((n, [k, was]) => n + Math.max(0, was - (e.counts?.[k] ?? 0)), 0);
+    const already = total - added;
+    const context = [already && `${already} already there`, fixed && `${fixed} fixed`].filter(Boolean).join(' · ');
+    if (added) {
+      return {
+        text: plural(added, 'new fault') + ' since this round',
+        detail: [faultList(e.added), context].filter(Boolean).join(' · '),
+        tone: 'warn',
+      };
+    }
+    if (!total) return { text: fixed ? 'No layout faults left' : 'No layout faults', detail: context, tone: 'good' };
+    return { text: 'No new faults', detail: context, tone: 'good' };
+  }
+
+  /*
+    The files a round changed, each one opening to its diff.
+
+    Two path segments, not one: a Next app has a dozen page.tsx files, and the
+    name alone says nothing about which. The diff is fetched when asked for,
+    because most rounds are judged by looking at the page, not the source.
+  */
+  function fileList(round, files) {
+    const list = document.createElement('div');
+    list.className = NS + '-files';
+    for (const f of files) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = NS + '-file';
+      row.dataset.status = f.status;
+      row.title = f.file;
+      const name = document.createElement('span');
+      name.textContent = f.file.split('/').slice(-2).join('/');
+      const count = document.createElement('em');
+      if (f.added) count.appendChild(document.createElement('ins')).textContent = '+' + f.added;
+      if (f.removed) count.appendChild(document.createElement('del')).textContent = '−' + f.removed;
+      if (!f.added && !f.removed && f.status !== 'modified') count.textContent = f.status;
+      row.append(name, count);
+      row.addEventListener('click', async () => {
+        const open = row.nextElementSibling?.classList.contains(NS + '-diff');
+        if (open) {
+          row.nextElementSibling.remove();
+          return;
+        }
+        const lines = await window.__aynaDiff?.(round, f.file).catch(() => null);
+        const pre = document.createElement('div');
+        pre.className = NS + '-diff';
+        for (const l of lines ?? [{ t: '…', s: 'no diff to show' }]) {
+          const line = document.createElement('div');
+          line.dataset.t = l.t;
+          line.textContent = (l.t === '…' ? '' : l.t + ' ') + (l.t === '…' ? l.s || '…' : l.s);
+          pre.appendChild(line);
+        }
+        row.after(pre);
+      });
+      list.appendChild(row);
+    }
+    return list;
+  }
+
+  /*
+    The way back from a round, on the round.
+
+    Two steps, because it rewrites files: the first press says how many, the
+    second does it. A refusal is said in the card — which file changed since,
+    or why not now — rather than failing quietly, since the user pressed it
+    expecting their files back.
+  */
+  function undoControl(key, files) {
+    const acts = document.createElement('div');
+    acts.className = NS + '-round-acts';
+    const go = document.createElement('button');
+    go.type = 'button';
+    const keep = document.createElement('button');
+    keep.type = 'button';
+    keep.dataset.act = 'undo-keep';
+    keep.textContent = 'Keep';
+    const said = document.createElement('span');
+    const idle = () => {
+      go.dataset.act = 'undo';
+      go.textContent = 'Undo this round';
+      go.title = 'Put ' + plural(files.length, 'file') + ' back the way they were before this round';
+      go.disabled = false;
+      keep.remove();
+    };
+    idle();
+    acts.append(go, said);
+
+    keep.addEventListener('click', () => {
+      said.textContent = '';
+      idle();
+    });
+    go.addEventListener('click', async () => {
+      if (go.dataset.act === 'undo') {
+        go.dataset.act = 'undo-confirm';
+        go.textContent = 'Undo ' + plural(files.length, 'file');
+        said.textContent = '';
+        go.after(keep);
+        return;
+      }
+      go.disabled = true;
+      const done = await window.__aynaUndo?.(key).catch((err) => ({ ok: false, reason: err.message }));
+      if (done?.ok) {
+        // The changes are gone, so there is nothing left on the page to judge.
+        if (state.phase === 'review') {
+          clearReview();
+          state.seq = 0;
+          setPhase('comment');
+          window.__aynaMore();
+        }
+        pumpConsole();
+        return;
+      }
+      const names = (list) => list.map((f) => f.split('/').pop()).join(', ');
+      said.textContent = done?.conflicts?.length
+        ? 'Not undone: ' + names(done.conflicts) + ' changed after this round'
+        : done?.unknown?.length
+          ? 'Not undone: no copy of ' + names(done.unknown) + ' from before'
+          : 'Not undone: ' + (done?.reason ?? 'the window did not answer');
+      idle();
+    });
+    return acts;
+  }
+
+  const roundCard = (round) => [...cards].reverse().find((c) => c.round === round) ?? cards.at(-1) ?? null;
+
+  /** Draw one event. Returns false for anything the rail does not show. */
+  function renderEvent(e, lines) {
+    const last = cards.at(-1) ?? null;
+
+    if (e.event === 'task' && 'url' in e) {
+      // A note being raised: it belongs to the round that has not been sent yet.
+      if (e.status === 'proposed') {
+        noteOfTask.set(e.taskId, e.comment);
+        // Claude's own suggestions, or a check's (the taste review files these).
+        const ours = e.source && e.source !== 'claude';
+        const row = item({
+          who: ours ? 'ayna' : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
+          detail: 'a suggestion · waiting for your word',
+        });
+        if (last) addToCard(last, row);
+        else lines.appendChild(row);
+        return true;
+      }
+      /*
+        Only a note made in this window is a draft of its next round. One filed
+        from elsewhere — another window, the CLI, an import — is not going out
+        with anything sent from here, and drawing it as "Not sent yet" said
+        that it was.
+      */
+      noteOfTask.set(e.taskId, e.comment);
+      if (myTab && e.tabId !== myTab) {
+        const row = item({
+          who: e.source === 'claude' ? 'Claude' : 'ayna', lane: e.source === 'claude' ? 'claude' : 'ayna',
+          text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks',
+        });
+        if (last) addToCard(last, row);
+        else lines.appendChild(row);
+        return true;
+      }
+      const card = last && last.state === 'drafting' ? last : newCard(lines, 'drafting', e.seq);
+      card.tasks.set(e.taskId, e.status ?? 'open');
+      card.raised.add(e.taskId);
+      cardOfTask.set(e.taskId, card);
+      const row = addToCard(card, item({ who: 'You', lane: 'you', text: e.comment ?? '', detail: pageOf(e.url), at: e.at }));
+      attachCrop(row, e.taskId);
+      return true;
+    }
+
+    if (e.event === 'task') {
+      const card = cardOfTask.get(e.taskId) ?? last;
+      const note = quote(noteOfTask.get(e.taskId));
+      if (card?.tasks.has(e.taskId) || card === last) card?.tasks.set(e.taskId, e.status);
+      const said = {
+        approved: { who: 'You', lane: 'you', text: 'Approved', tone: 'good' },
+        in_progress: { who: 'Claude', lane: 'claude', text: 'Working on it' },
+        applied: { who: 'Claude', lane: 'claude', text: 'Done' },
+        needs_confirmation: { who: 'ayna', lane: 'ayna', text: 'Needs your confirmation', tone: 'warn' },
+        obsolete: { who: 'ayna', lane: 'ayna', text: 'No longer needed' },
+      }[e.status];
+      // "rejected" is drawn from its own event, which carries the note; "open"
+      // again is bookkeeping for a retry, not something anyone did.
+      if (!said) return false;
+      const row = item({ ...said, detail: note, at: e.at });
+      if (card) addToCard(card, row);
+      else lines.appendChild(row);
+      settleCard(card);
+      return true;
+    }
+
+    if (e.event === 'round') {
+      const card = last && last.state === 'drafting' ? last : newCard(lines, 'waiting', e.seq);
+      setCard(card, 'waiting', { round: e.round, at: e.at });
+      // Every note the round carries is the round's to settle, wherever it was
+      // written — a retry, or work left open by another window.
+      for (const n of e.notes ?? []) {
+        card.tasks.set(n.taskId, 'open');
+        cardOfTask.set(n.taskId, card);
+        if (!noteOfTask.has(n.taskId)) noteOfTask.set(n.taskId, n.comment);
+      }
+      // Those carried in travel with this round but were not written in it.
+      const others = e.notes
+        ? e.notes.filter((n) => !card.raised.has(n.taskId)).length
+        : (e.open ?? 0) - card.raised.size;
+      if (others > 0) {
+        const p = document.createElement('p');
+        p.className = NS + '-round-note';
+        p.textContent = 'Also sends ' + plural(others, 'earlier note');
+        card.body.appendChild(p);
+      }
+      return true;
+    }
+
+    if (e.event === 'applied') {
+      const card = roundCard(e.round);
+      if (!card) return false;
+      const how = { user: 'you said the changes are in', 'file-change': 'noticed from the edits' }[e.via] ?? '';
+      const files = e.files ?? [];
+      const row = addToCard(card, item({
+        who: 'Claude', lane: 'claude', at: e.at, detail: how,
+        text: files.length ? 'Finished · ' + plural(files.length, 'file') : 'Finished',
+      }));
+      if (files.length) row.appendChild(fileList(e.round, files));
+      card.files = files;
+      card.key = e.key;
+      setCard(card, 'ready');
+      return true;
+    }
+
+    if (e.event === 'gate') {
+      const card = roundCard(e.round);
+      if (!card) return false;
+      addToCard(card, item({ who: 'ayna', lane: 'ayna', at: e.at, ...gateWords(e) }));
+      // Offered once the round has finished landing — the check is the last
+      // step of that — so an undo never races the reload that shows the change.
+      if (card.files?.length && card.state !== 'undone' && !card.el.querySelector('.' + NS + '-round-acts')) {
+        card.el.appendChild(undoControl(card.key ?? e.round, card.files));
+      }
+      return true;
+    }
+
+    if (e.event === 'undone') {
+      const card = roundCard(e.round);
+      if (!card) return false;
+      addToCard(card, item({
+        who: 'You', lane: 'you', text: 'Undid this round', tone: 'warn', at: e.at,
+        detail: plural(e.files?.length ?? 0, 'file') + ' put back as they were',
+      }));
+      card.el.querySelector('.' + NS + '-round-acts')?.remove();
+      for (const f of card.el.querySelectorAll('.' + NS + '-file')) f.classList.add(NS + '-gone');
+      setCard(card, 'undone');
+      return true;
+    }
+
+    if (e.event === 'rejected') {
+      const card = [...cards].reverse().find((c) => c.state === 'ready' || c.state === 'sentback') ?? last;
+      if (!card) return false;
+      addToCard(card, item({ who: 'You', lane: 'you', text: 'Sent back', detail: quote(e.comment), tone: 'warn', at: e.at }));
+      setCard(card, 'sentback');
+      return true;
+    }
+
+    const row = consoleLine(e);
+    if (!row) return false;
+    // A message to the same speaker as the line before it is a new paragraph,
+    // not a new header.
+    const parent = e.event === 'closed' || !last ? lines : last.body;
+    const prev = parent.lastElementChild;
+    if (
+      !('step' in row.dataset) &&
+      prev?.classList.contains(NS + '-line') &&
+      !('step' in prev.dataset) &&
+      prev.dataset.kind === row.dataset.kind
+    ) {
+      row.classList.add(NS + '-cont');
+    }
+    parent.appendChild(row);
+    return true;
   }
 
   function setConsoleMinimised(min) {
@@ -3154,10 +3773,46 @@
     }
   }
 
+  /*
+    The activity shows this window only, so the past gets one line: how many
+    windows came before, and how much they left open. "Show" opens the task
+    list, which already groups that work by page.
+  */
+  async function pumpEarlier() {
+    if (!consoleEl || !window.__aynaEarlier) return;
+    const el = consoleEl.querySelector('.' + NS + '-earlier');
+    const { windows = 0, open = 0 } = (await window.__aynaEarlier().catch(() => null)) ?? {};
+    el.hidden = !windows && !open;
+    if (el.hidden) return;
+    const parts = ['Earlier'];
+    if (windows) parts.push(plural(windows, 'window'));
+    parts.push(open ? plural(open, 'note') + ' still open' : 'nothing left open');
+    el.querySelector('span').textContent = parts.join(' · ');
+    el.querySelector('button').hidden = !open;
+  }
+
+  /*
+    One read of the feed at a time. The timer and an action that pumps straight
+    away can overlap, and two reads from the same cursor would draw the same
+    events twice.
+  */
+  let pumping = false;
   async function pumpConsole() {
-    if (!consoleEl || !window.__aynaFeed) return;
+    if (!consoleEl || !window.__aynaFeed || pumping) return;
+    pumping = true;
+    try {
+      await readFeed();
+    } finally {
+      pumping = false;
+    }
+  }
+
+  async function readFeed() {
+    if (myTab === undefined) myTab = (await window.__aynaState?.().catch(() => null))?.tab ?? null;
     const events = await window.__aynaFeed(consoleSeq).catch(() => []);
     if (!events || !events.length) return;
+    // A verdict on carried-over work changes what the earlier line owes.
+    if (events.some((e) => e.event === 'task')) pumpEarlier();
 
     const lines = consoleEl.querySelector('.' + NS + '-console-lines');
     // Only follow the tail when the reader is already at it; yanking someone back
@@ -3174,24 +3829,7 @@
       consoleSeq = Math.max(consoleSeq, e.seq ?? 0);
       // The same stream that carries messages carries these; no second channel.
       if (e.event === 'preview') startPreview(e);
-      if (e.event === 'round' && e.round !== consoleRound) {
-        consoleRound = e.round;
-        clearEmpty();
-        lines.appendChild(roundHeader(e));
-      }
-      const row = consoleLine(e);
-      if (!row) continue;
-      clearEmpty();
-      const prev = lines.lastElementChild;
-      if (
-        !('step' in row.dataset) &&
-        prev?.classList.contains(NS + '-line') &&
-        !('step' in prev.dataset) &&
-        prev.dataset.kind === row.dataset.kind
-      ) {
-        row.classList.add(NS + '-cont');
-      }
-      lines.appendChild(row);
+      if (renderEvent(e, lines)) clearEmpty();
     }
     while (lines.children.length > 300) lines.removeChild(lines.firstChild);
     if (atBottom) lines.scrollTop = lines.scrollHeight;
@@ -3241,6 +3879,7 @@
         '<span class="' + NS + '-spacer"></span>' +
         '<button data-act="fold">Hide</button>' +
       '</div>' +
+      '<div class="' + NS + '-earlier" hidden><span></span><button data-act="earlier">Show</button></div>' +
       /*
         An empty rail has to say it is empty.
 
@@ -3280,6 +3919,7 @@
     setRailTint();
 
     consoleEl.querySelector('[data-act=fold]').addEventListener('click', () => setConsoleMinimised(!consoleMin));
+    consoleEl.querySelector('[data-act=earlier]').addEventListener('click', () => togglePanel());
 
     const input = consoleEl.querySelector('input');
     const send = async () => {
@@ -3309,6 +3949,7 @@
     }
 
     setConsoleMinimised(consoleMin);
+    pumpEarlier();
     pumpConsole();
     clearInterval(consoleTimer);
     consoleTimer = setInterval(() => {

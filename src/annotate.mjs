@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { gotoSettled, reloadSettled } from './browser.mjs';
+import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs';
 
 /**
  * Point-and-comment review on the live page.
@@ -36,6 +37,18 @@ import { gotoSettled, reloadSettled } from './browser.mjs';
  * pointed at it. Anything scrolled out falls back to the disruptive path, since a
  * silently truncated crop of what they framed would be worse than a flinch.
  */
+/*
+  ayna's own chrome, hidden for the length of a capture.
+
+  A crop is taken while the selection box, its label and the numbered pin are
+  drawn over the element, so every crop showed "p.text-sm ↑↓ select wider" and a
+  badge sitting on the very text the note was about — and that crop is what
+  Claude reads and what the activity rail shows. Everything ayna draws carries
+  data-ayna; the app's own elements never do, so this hides exactly the chrome.
+  `visibility`, not `display`, so nothing in the app moves.
+*/
+export const WITHOUT_CHROME = '[data-ayna] { visibility: hidden !important; }';
+
 export async function cropRegion(page, rect, pad) {
   const clip = {
     x: Math.max(0, rect.x - pad),
@@ -313,7 +326,7 @@ export async function runAnnotate({
     // Crop the exact region the user pointed at, with a little breathing room.
     const regionFile = path.join(dir, 'region.png');
     try {
-      await page.screenshot({ path: regionFile, ...(await cropRegion(page, payload.rect, 12)) });
+      await page.screenshot({ path: regionFile, style: WITHOUT_CHROME, ...(await cropRegion(page, payload.rect, 12)) });
     } catch {
       // An off-screen or zero-size target just means no crop; the comment still stands.
     }
@@ -393,6 +406,7 @@ export async function runAnnotate({
             twice.
           */
           legacyKey: `${path.basename(outDir)}#${record.id}`,
+          tabId,
           url: record.url,
           kind: record.kind,
           comment: record.comment,
@@ -511,12 +525,17 @@ export async function runAnnotate({
 
     Task changes are the exception: the store already logs them as it makes them,
     and writing them twice would say everything twice.
+
+    Every row carries this window's tab. Untagged, a round from last week's
+    review and a round from this one were indistinguishable, so a new window
+    could only replay the project's whole history — "Window closed" at the top,
+    and "round 1" twice.
   */
   const emit = (e) => {
     pushFeed(e);
     if (store?.db && e.event !== 'task') {
       import('./db.mjs')
-        .then(({ appendEvent }) => appendEvent(store.db, e))
+        .then(({ appendEvent }) => appendEvent(store.db, { ...e, tabId, sessionId }))
         .catch(() => {
           // The mirror and stdout still carry it; a log write must not take the
           // window down.
@@ -526,6 +545,21 @@ export async function runAnnotate({
   };
 
   let editedAt = 0;
+  // Every file the watcher saw move this round, and the project as it was
+  // before, so the round can say what it changed. See rounds.mjs.
+  const roundEdits = new Set();
+  let roundSnapshot = null;
+  const roundFiles = new Map();
+  // Which notes went out with each round, so undoing it can reopen them.
+  const roundNotes = new Map();
+  /*
+    Rounds are numbered per process, and a window can outlive one: an agent that
+    resumes its session reuses its tab, so a rail can show a dead process's
+    "Round 1" next to this one's. Undo is asked for by this key, never by the
+    bare number, so an old card can never take back the wrong round's files.
+  */
+  const windowKey = Math.random().toString(36).slice(2, 8);
+  const roundKey = (n) => `${windowKey}.${n}`;
   let projectWatcher = null;
   const watchProject = () => {
     if (projectWatcher || !projectDir) return;
@@ -538,6 +572,7 @@ export async function runAnnotate({
         if (parts.some((part) => part === '.ayna' || SKIP_DIRS.includes(part))) return;
         if (!TEXT_EXT.has(path.extname(rel).toLowerCase())) return;
         editedAt = Date.now();
+        roundEdits.add(rel);
       });
     } catch {
       // No recursive watch on this platform — the marker path still works.
@@ -574,11 +609,57 @@ export async function runAnnotate({
       .catch(() => null);
 
   let appearance = null;
+
+  /** The page's measurable faults, counted per check in SEVERITY's order. */
+  const countFaults = async () => {
+    const { CHECKS, SEVERITY } = await import('./audit.mjs');
+    const measured = await page.evaluate(CHECKS);
+    const counts = {};
+    for (const [key] of SEVERITY) counts[key] = measured?.[key]?.length ?? 0;
+    const serious = SEVERITY.filter(([, sev]) => sev !== 'minor').reduce((n, [k]) => n + counts[k], 0);
+    return { counts, serious, unavailable: measured?.unavailable ?? null };
+  };
+
+  /*
+    What the page measured before anyone touched it.
+
+    The gate after a round reported every fault on the page as "still there",
+    which read as "your change did not work" when nearly all of them had been
+    there all along — the user's own home page showed 27 of them on a round that
+    only renamed a footer. Counting once when the round is sent lets the gate
+    say what the round added, and leave what it found alone.
+
+    Bounded, because this sits between pressing Send and Claude hearing about
+    it; a page too heavy to measure in a few seconds just goes uncompared.
+  */
+  let baseline = null;
+  const samePage = (a, b) => {
+    try {
+      const [x, y] = [new URL(a), new URL(b)];
+      return x.origin + x.pathname + x.hash === y.origin + y.pathname + y.hash;
+    } catch {
+      return false;
+    }
+  };
+
   // The user finished a round of comments and wants them acted on.
   await page.exposeFunction('__aynaDone', async () => {
     round += 1;
     phase = 'awaiting-claude';
     appearance = await appearanceOf();
+    baseline = null;
+    try {
+      const before = await Promise.race([countFaults(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      if (before && !before.unavailable) baseline = { url: page.url(), counts: before.counts };
+    } catch {
+      // Uncompared is still honest; the gate reports totals as it always has.
+    }
+    roundNotes.set(round, comments.filter((c) => c.status !== 'approved').map((c) => c.id));
+    // Read before anyone edits, and before Claude hears there is anything to do.
+    roundEdits.clear();
+    roundSnapshot = projectDir
+      ? await snapshotProject(projectDir, { skipDirs: SKIP_DIRS, textExt: TEXT_EXT }).catch(() => null)
+      : null;
     watchProject();
     await writeManifest();
     await writeStatus();
@@ -587,6 +668,11 @@ export async function runAnnotate({
       round,
       comments: comments.length,
       open: comments.filter((c) => c.status !== 'approved').length,
+      // Which notes this round carries, including ones from earlier windows, so
+      // the round is not called approved while any of them is still unjudged.
+      notes: comments
+        .filter((c) => c.status !== 'approved' && c.taskId)
+        .map((c) => ({ taskId: c.taskId, comment: c.comment })),
       commentsFile,
       action: 'read-comments',
     });
@@ -616,13 +702,125 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaFeed', async (since = 0) => {
     if (store?.db) {
       try {
-        const { eventsSince } = await import('./db.mjs');
-        return eventsSince(store.db, Number(since) || 0, 200);
+        const { eventsSince, windowEventsSince } = await import('./db.mjs');
+        return tabId
+          ? windowEventsSince(store.db, tabId, Number(since) || 0, 200)
+          : eventsSince(store.db, Number(since) || 0, 200);
       } catch {
         // Fall through to the mirror rather than leaving the panel blank.
       }
     }
     return feed.filter((e) => e.seq > (Number(since) || 0));
+  });
+
+  /*
+    A note's crop, for its line in the activity.
+
+    The words of a note are half of it; the other half is what it pointed at,
+    and the crop is already on disk with the task. Handed over as a data URL
+    because the page cannot read the project's files, and capped so one huge
+    framed region cannot stall the rail.
+  */
+  await page.exposeFunction('__aynaCrop', async (taskId) => {
+    if (!store) return null;
+    try {
+      const file = (await store.get(String(taskId)))?.regionScreenshot;
+      if (!file) return null;
+      const buf = await readFile(file);
+      return buf.length > 512 * 1024 ? null : 'data:image/png;base64,' + buf.toString('base64');
+    } catch {
+      return null;
+    }
+  });
+
+  /*
+    Take a round back.
+
+    Rejecting a change does not undo it: "Needs work" asks for another attempt
+    on top of the one that missed, and the only way back to before was git, by
+    hand, outside the window. This restores exactly the files the round
+    changed, refuses if any of them has been edited since (see undoChanges),
+    and reopens the notes the round carried, because what they asked for is
+    still not done.
+
+    Not while Claude is working: a round in flight is writing the same files.
+  */
+  await page.exposeFunction('__aynaUndo', async (key) => {
+    const [owner, number] = String(key).split('.');
+    if (owner !== windowKey) return { ok: false, reason: 'that round was in an earlier window' };
+    const n = Number(number);
+    const changes = roundFiles.get(n);
+    if (!changes?.length) return { ok: false, reason: 'nothing to undo' };
+    if (phase === 'awaiting-claude') return { ok: false, reason: `Claude is working on round ${round}` };
+
+    const before = await appearanceOf();
+    const result = await undoChanges(projectDir, changes);
+    if (!result.ok) return result;
+    roundFiles.delete(n);
+
+    // Nothing is left on the page to judge. The overlay switches itself, but
+    // the window's own phase must not depend on that call coming back.
+    if (phase === 'reviewing') {
+      phase = 'commenting';
+      await rm(appliedFile, { force: true });
+    }
+
+    for (const id of roundNotes.get(n) ?? []) {
+      const c = comments.find((x) => x.id === id);
+      if (!c || c.status === 'open') continue;
+      c.status = 'open';
+      c.rounds.push({ round: n, status: 'open', via: 'undo' });
+      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, `round ${n} undone`, { tabId });
+    }
+    await writeManifest();
+    await writeStatus();
+    emit({ event: 'undone', round: n, files: result.restored, action: 'files-reverted' });
+
+    /*
+      Let the page show it. A dev server with hot reload already has; a static
+      one needs the reload. Same signature test as after a round, after a
+      moment for the dev server to notice — and not awaited, because the call
+      that asked for this is running inside the page being reloaded.
+    */
+    setTimeout(async () => {
+      if (page.isClosed()) return;
+      const after = await appearanceOf();
+      if (before && after && before.rules === after.rules) {
+        // The load handler puts the overlay back.
+        await reloadSettled(page).catch(() => {});
+      }
+    }, 1500);
+    return { ok: true, restored: result.restored };
+  });
+
+  // One file's diff from one round, as lines for the panel. See rounds.mjs.
+  await page.exposeFunction('__aynaDiff', async (forRound, file) => {
+    const change = roundFiles.get(Number(forRound))?.find((c) => c.file === file);
+    return change?.ops ? hunks(change.ops) : null;
+  });
+
+  /*
+    One line for everything before this window.
+
+    Scoping the activity to this window must not make earlier work disappear —
+    a note left open last time is still owed, and it is what the user most
+    needs to know about the past. So the panel says how many windows came
+    before and how much they left open, and the Tasks list has the detail.
+  */
+  await page.exposeFunction('__aynaEarlier', async () => {
+    if (!store?.db || !tabId) return { windows: 0, open: 0 };
+    try {
+      const mine = store.db.prepare('SELECT opened_at FROM tabs WHERE id = ?').get(tabId)?.opened_at ?? Date.now();
+      const { windows } = store.db
+        .prepare('SELECT COUNT(*) AS windows FROM tabs WHERE id <> ? AND opened_at < ?')
+        .get(tabId, mine);
+      const { isPending } = await import('./tasks.mjs');
+      // Raised before this window opened, by any window or none, and not yet settled.
+      const open = (await store.list()).filter((t) => isPending(t) && Date.parse(t.createdAt) < mine).length;
+      return { windows, open };
+    } catch {
+      return { windows: 0, open: 0 };
+    }
   });
 
   /*
@@ -738,7 +936,7 @@ export async function runAnnotate({
   */
   await page.exposeFunction('__aynaPreview', async (rect) => {
     try {
-      const buf = await page.screenshot(await cropRegion(page, rect, 8));
+      const buf = await page.screenshot({ style: WITHOUT_CHROME, ...(await cropRegion(page, rect, 8)) });
       return 'data:image/png;base64,' + buf.toString('base64');
     } catch {
       return null;
@@ -758,15 +956,15 @@ export async function runAnnotate({
       c.comment = note;
       c.status = 'open';
       c.source = 'user';
-      if (store && c.taskId) await store.update(c.taskId, { comment: note, status: 'open', source: 'user' }, 'redirected by the user');
+      if (store && c.taskId) await store.update(c.taskId, { comment: note, status: 'open', source: 'user' }, 'redirected by the user', { tabId });
       emit({ event: 'task', id: c.taskId ?? id, status: 'open', comment: note, action: 'do-this-instead' });
     } else if (verdict === 'approve') {
       c.status = 'open'; // approved to go ahead, not approved as done
-      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, 'user approved the proposal');
+      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, 'user approved the proposal', { tabId });
       emit({ event: 'task', id: c.taskId ?? id, status: 'open', comment: c.comment, action: 'go-ahead' });
     } else {
       c.status = 'approved'; // declined and settled; nothing to do
-      if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, 'user declined the proposal');
+      if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, 'user declined the proposal', { tabId });
     }
     await writeManifest();
     await writeStatus();
@@ -800,9 +998,19 @@ export async function runAnnotate({
     if (!c || !['approved', 'rejected', 'open'].includes(status)) {
       return { ok: false };
     }
+    /*
+      The same verdict twice is one verdict.
+
+      Pressing "Needs work" again on a note already sent back logged a second
+      rejection — two "Sent back" lines in the activity, two entries in the
+      comment's history, and a second retry request for the same attempt.
+    */
+    if (c.status === status) {
+      return { ok: true, status, open: comments.filter((x) => x.status !== 'approved').length };
+    }
     c.status = status;
     c.rounds.push({ round, status });
-    if (store && c.taskId) await store.update(c.taskId, { status });
+    if (store && c.taskId) await store.update(c.taskId, { status }, undefined, { tabId });
     await writeManifest();
     await writeStatus();
     if (status === 'rejected') {
@@ -835,7 +1043,7 @@ export async function runAnnotate({
     for (const c of comments) {
       if (c.status !== 'approved') {
         c.status = 'approved';
-        if (store && c.taskId) await store.update(c.taskId, { status: 'approved' });
+        if (store && c.taskId) await store.update(c.taskId, { status: 'approved' }, undefined, { tabId });
         c.rounds.push({ round, status: 'approved', via: 'approve-all' });
         n += 1;
       }
@@ -849,6 +1057,8 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaState', async () => ({
     phase,
     round,
+    // Lets the activity tell a note made here from one filed from elsewhere.
+    tab: tabId,
     count: comments.length,
     pending: comments.filter((c) => c.status !== 'approved').length,
     resumed,
@@ -1008,13 +1218,54 @@ export async function runAnnotate({
       saidApplied = false;
       stopWatchingProject();
       await rm(appliedFile, { force: true });
-      emit({ event: 'applied', round, via: reason });
+
+      /*
+        Do not reload a page that has already updated itself.
+
+        The reload exists to make a fix visible. An app with hot reloading has
+        shown it before ayna gets here, so the reload is pure loss: it throws
+        away everything the browser was holding — a canvas viewport, a zoom
+        level, an open diagram, unsaved edits — and none of that comes back from
+        a scroll position. Restoring scroll never helped anyone reviewing a
+        canvas, because their place was never scroll.
+
+        The signature is taken before the round is sent and compared now. Style
+        text and element count are what a UI fix changes and what animation and
+        incoming data do not, so a difference means the page moved on its own.
+
+        Decided before announcing, so the announcement can say which happened.
+        It used to go out twice for a hot-reloaded page — once before the check
+        and again with `reloaded: false` — and every reader saw it land twice.
+      */
+      const signature = await appearanceOf();
+      const changedItself =
+        appearance && signature && appearance.rules === signature.rules
+          ? false
+          : Boolean(appearance && signature);
+
+      /*
+        Which files the round changed, with the counts, so the person judging it
+        can see what was done instead of taking "landed" on trust. The diffs are
+        kept here for the panel to ask for; the event carries only the list.
+      */
+      const changes = roundSnapshot ? await roundChanges(roundSnapshot, roundEdits).catch(() => []) : [];
+      roundFiles.set(round, changes);
+      roundSnapshot = null;
+      roundEdits.clear();
+      emit({
+        event: 'applied',
+        round,
+        key: roundKey(round),
+        via: reason,
+        reloaded: !changedItself,
+        files: changes.map(({ file, status, added, removed }) => ({ file, status, added, removed })),
+      });
+
       // Anything the user sent back for another attempt has now had one, so it
       // returns to the pile to be judged again rather than staying "rejected".
       for (const c of comments) {
         if (c.status === 'rejected') c.status = 'open';
       }
-      const signature = await appearanceOf();
       try {
         /*
           Come back to where they were standing.
@@ -1026,28 +1277,7 @@ export async function runAnnotate({
         */
         const at = await page.evaluate(() => ({ x: scrollX, y: scrollY })).catch(() => null);
 
-        /*
-          Do not reload a page that has already updated itself.
-
-          The reload exists to make a fix visible. An app with hot reloading has
-          shown it before ayna gets here, so the reload is pure loss: it throws
-          away everything the browser was holding — a canvas viewport, a zoom
-          level, an open diagram, unsaved edits — and none of that comes back from
-          a scroll position. Restoring scroll never helped anyone reviewing a
-          canvas, because their place was never scroll.
-
-          The signature is taken before the round is sent and compared now. Style
-          text and element count are what a UI fix changes and what animation and
-          incoming data do not, so a difference means the page moved on its own.
-        */
-        const changedItself =
-          appearance && signature && appearance.rules === signature.rules
-            ? false
-            : Boolean(appearance && signature);
-
-        if (changedItself) {
-          emit({ event: 'applied', round, via: reason, reloaded: false });
-        } else {
+        if (!changedItself) {
           await reloadSettled(page);
           if (at && (at.x || at.y)) {
             await page.evaluate((p) => scrollTo(p.x, p.y), at).catch(() => {});
@@ -1078,17 +1308,24 @@ export async function runAnnotate({
           reason to refuse them the choice.
         */
         try {
-          const { CHECKS: GATE, SEVERITY: RANK } = await import('./audit.mjs');
-          const measured = await measureApp(GATE);
-          const counts = {};
-          for (const [key] of RANK) counts[key] = measured?.[key]?.length ?? 0;
-          const serious = RANK.filter(([, sev]) => sev !== 'minor').reduce((n, [k]) => n + counts[k], 0);
+          const { counts, serious, unavailable } = await countFaults();
+          /*
+            `before` is the page when the round was sent and `added` is what is
+            new since, per check. Only when it is the same page: a user who
+            browsed elsewhere while waiting is looking at different faults, and
+            subtracting one page's count from another's is not a comparison.
+          */
+          const compared = !unavailable && baseline && samePage(baseline.url, page.url()) ? baseline.counts : null;
           emit({
             event: 'gate',
             round,
-            clean: !measured?.unavailable && serious === 0,
+            clean: !unavailable && serious === 0,
             counts,
-            unavailable: measured?.unavailable ?? null,
+            before: compared,
+            added: compared
+              ? Object.fromEntries(Object.entries(counts).map(([k, n]) => [k, Math.max(0, n - (compared[k] ?? 0))]))
+              : null,
+            unavailable,
           });
         } catch (err) {
           // A gate that cannot run says so. Reporting it as clean would be the
