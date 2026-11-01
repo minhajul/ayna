@@ -3994,8 +3994,9 @@
     app 90px — and reviewing a site's mobile layout is the commonest reason to
     narrow the window at all. Below 900px the rail takes no width (the media
     query zeroes --ayna-rail-inset, so the page follows without any script),
-    and opens over the page from a floating button instead: a side drawer on a
-    tablet, a bottom sheet on a phone. Its badge says when a round is waiting.
+    and opens over the page as a drawer from the left, under the bar, from the
+    Activity button at the bar's left end. The button's dot says whose move it
+    is when a round is waiting.
   */
   const NARROW = '(max-width: 899px)';
   const isNarrow = () => Boolean(window.matchMedia && window.matchMedia(NARROW).matches);
@@ -4466,13 +4467,19 @@
     if (!el) return;
     const tasks = await window.__aynaList().catch(() => []);
     const pending = tasks.filter((t) => t.status !== 'approved').length;
-    el.innerHTML = TASKS_FACE;
-    if (pending) {
-      const chip = document.createElement('span');
+    /*
+      Only the count changes. Rewriting the button's markup on every task
+      update re-parsed its icon and replaced the elements under a resting
+      pointer, for a number that was usually the same as before.
+    */
+    let chip = el.querySelector('.' + NS + '-chip');
+    if (pending && !chip) {
+      chip = document.createElement('span');
       chip.className = NS + '-chip';
-      chip.textContent = String(pending);
       el.appendChild(chip);
     }
+    if (chip && !pending) chip.remove();
+    else if (chip && chip.textContent !== String(pending)) chip.textContent = String(pending);
     el.setAttribute('aria-label', pending ? `Tasks, ${pending} pending` : 'Tasks');
   }
 
