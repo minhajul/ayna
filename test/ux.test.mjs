@@ -550,11 +550,31 @@ describe('ending a review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, ()
       await page.waitForTimeout(400);
       midway = await page.evaluate(() => document.querySelector('.ayna-ov-hint')?.textContent);
       await page.click('[data-act=stay]');
-      await page.waitForTimeout(600);
+      // Past the page's countdown and Node's backstop both: Stay cancels each.
+      await page.waitForTimeout(3200);
       stillOpen = !page.isClosed();
     });
     assert.match(midway, /Closing the review/);
     assert.equal(stillOpen, true, 'Stay open did not keep the window');
+  });
+
+  test('a reload during the close countdown still ends the review', async () => {
+    /*
+      The countdown lived only in the page, so a reload in that moment — a dev
+      server's full reload, or the overlay reloading itself — threw it away. The
+      user had pressed Close and the window stayed open for good; a scripted
+      review waited on it forever, which is what hung this file.
+    */
+    let ended = null;
+    await reviewing(async (page) => {
+      await page.click('[data-act=close]');
+      await page.reload();
+      ended = await page.waitForEvent('close', { timeout: 8000 }).then(
+        () => true,
+        () => false,
+      );
+    });
+    assert.equal(ended, true, 'the window stayed open after Close');
   });
 });
 

@@ -1120,20 +1120,40 @@ export async function runAnnotate({
   });
 
   // They're happy — this is the only thing that closes the window.
-  await page.exposeFunction('__aynaApprove', async () => {
-    /*
-      Closing is not a verdict.
+  /*
+    Closing is not a verdict.
 
-      This used to mark every unjudged comment resolved, which meant one click
-      silently signed off work nobody had looked at. A task you have not approved
-      stays pending — it survives the window closing and is still waiting next
-      time. Each one is approved on its own marker, deliberately.
-    */
+    This used to mark every unjudged comment resolved, which meant one click
+    silently signed off work nobody had looked at. A task you have not approved
+    stays pending — it survives the window closing and is still waiting next
+    time. Each one is approved on its own marker, deliberately.
+  */
+  let closingTimer = null;
+  const finish = async () => {
+    clearTimeout(closingTimer);
+    closingTimer = null;
+    if (done) return;
     phase = 'approved';
     done = true;
     await writeManifest();
     await writeStatus();
     emit({ event: 'closed', approved: true, commentsFile });
+  };
+  await page.exposeFunction('__aynaApprove', finish);
+
+  /*
+    The close countdown, kept here as well as on the page.
+
+    The page counts down a moment the user can take back, then calls
+    __aynaApprove. But that timer lives in the page, and a reload in the moment
+    — a dev server's full reload, the overlay itself being reloaded — threw it
+    away: the user had pressed Close, the window never closed, and a scripted
+    review waited on it forever. This copy finishes the job a second after the
+    page should have, and Stay open cancels both.
+  */
+  await page.exposeFunction('__aynaClosing', async (on) => {
+    clearTimeout(closingTimer);
+    closingTimer = on ? setTimeout(() => finish().catch(() => {}), 2500) : null;
   });
 
   // Approving everything is now a deliberate button of its own, never a side

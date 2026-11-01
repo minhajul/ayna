@@ -1379,9 +1379,13 @@
         cleanup();
         window.__aynaApprove();
       }, 1500);
+      // Node keeps its own copy of the countdown, so a reload in this moment
+      // cannot leave the window open after Close was pressed.
+      window.__aynaClosing?.(true);
 
       bar.querySelector('[data-act=stay]').addEventListener('click', () => {
         clearTimeout(end);
+        window.__aynaClosing?.(false);
         closing = false;
         setPhase('review');
       });
