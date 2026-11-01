@@ -634,6 +634,26 @@ export async function runAnnotate({
   });
 
   /*
+    A note's crop, for its line in the activity.
+
+    The words of a note are half of it; the other half is what it pointed at,
+    and the crop is already on disk with the task. Handed over as a data URL
+    because the page cannot read the project's files, and capped so one huge
+    framed region cannot stall the rail.
+  */
+  await page.exposeFunction('__aynaCrop', async (taskId) => {
+    if (!store) return null;
+    try {
+      const file = (await store.get(String(taskId)))?.regionScreenshot;
+      if (!file) return null;
+      const buf = await readFile(file);
+      return buf.length > 512 * 1024 ? null : 'data:image/png;base64,' + buf.toString('base64');
+    } catch {
+      return null;
+    }
+  });
+
+  /*
     One line for everything before this window.
 
     Scoping the activity to this window must not make earlier work disappear —

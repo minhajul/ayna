@@ -626,6 +626,58 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.ok(lines.includes('you:make it wider too'), 'the reply typed on the page was lost');
   });
 
+  test('a round is one card that says whose move it is', async () => {
+    const seen = [];
+    await withConsole(async (page, dir) => {
+      const card = () =>
+        page.evaluate(() => {
+          const c = [...document.querySelectorAll('.ayna-ov-round')].at(-1);
+          return c && {
+            title: c.querySelector('.ayna-ov-round-head b').textContent,
+            pill: c.querySelector('.ayna-ov-pill').textContent,
+            lines: [...c.querySelectorAll('.ayna-ov-item')].map(
+              (n) => n.querySelector('b').textContent + ': ' + n.querySelector('span').textContent,
+            ),
+            cards: document.querySelectorAll('.ayna-ov-round').length,
+          };
+        });
+
+      await page.click('.t');
+      await page.waitForSelector('.ayna-ov-pop textarea');
+      await page.fill('.ayna-ov-pop textarea', 'make it bigger');
+      await page.click('.ayna-ov-save');
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+
+      await page.click('[data-act=send]');
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+
+      await writeFile(path.join(dir, 'out', 'applied'), '1');
+      await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+      await page.waitForTimeout(1500);
+      seen.push(await card());
+
+      await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+      await page.waitForTimeout(1300);
+      seen.push(await card());
+    });
+
+    const [drafting, sent, landed, judged] = seen;
+    // The note sits under its round from the start, not above a header drawn later.
+    assert.deepEqual(drafting, { title: 'Next round', pill: 'Not sent yet', lines: ['You: make it bigger'], cards: 1 });
+    assert.equal(sent.title, 'Round 1');
+    assert.equal(sent.pill, 'Claude is working');
+    assert.equal(sent.cards, 1, 'sending turns the draft into the round, it does not add a second card');
+    assert.equal(landed.pill, 'Your turn');
+    assert.ok(landed.lines.includes('Claude: Finished'), landed.lines.join(' | '));
+    assert.ok(landed.lines.some((l) => l.startsWith('ayna: ')), 'the check is signed by ayna, not by Claude');
+    assert.equal(judged.pill, 'Approved');
+    assert.equal(judged.lines.at(-1), 'You: Approved');
+    // Nothing speaks in ids or code names.
+    assert.doesNotMatch(judged.lines.join(' '), /task-\d|lowContrast|smallTargets/);
+  });
+
   test('never covers the app, open or minimised', async () => {
     /*
       A panel that sits on top of the thing you are reviewing is not a panel.
