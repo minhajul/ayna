@@ -2267,6 +2267,127 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
+  test("a round is approved only when every note it carried is, and outside notes are not drafts", async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const { openStore } = await import('../src/tasks.mjs');
+      const site = path.join(dir, 'site');
+      await fixtureSite(site);
+      const out = path.join(dir, 'out');
+      const server = await serveStatic(site, 4747);
+      const store = await openStore(dir);
+      // Left open by an earlier window; this one picks it up and sends it along.
+      await store.create({ comment: 'carried from yesterday', url: server.url, selector: '.lede' });
+      const seen = {};
+      try {
+        await runAnnotate({
+          browser,
+          store,
+          url: server.url,
+          outDir: out,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onReady: async (page) => {
+            const card = () =>
+              page.evaluate(() => ({
+                cards: document.querySelectorAll('.ayna-ov-round').length,
+                pill: document.querySelector('.ayna-ov-round .ayna-ov-pill')?.textContent,
+                carried: document.querySelector('.ayna-ov-round-note')?.textContent ?? null,
+              }));
+            await page.click('.title');
+            await page.waitForSelector('.ayna-ov-pop textarea');
+            await page.fill('.ayna-ov-pop textarea', 'written here');
+            await page.click('.ayna-ov-save');
+            await page.waitForTimeout(400);
+            await page.click('[data-act=send]');
+            await page.waitForTimeout(600);
+            await writeFile(path.join(out, 'applied'), '1');
+            await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, { timeout: 20000 });
+
+            // A note filed from outside the window while this one is open.
+            await store.create({ comment: 'filed by the CLI', url: server.url });
+            await page.waitForTimeout(1500);
+            seen.outside = await page.evaluate(() =>
+              [...document.querySelectorAll('.ayna-ov-item')]
+                .map((n) => n.querySelector('span').textContent + ' | ' + (n.querySelector('small')?.textContent ?? ''))
+                .find((l) => l.startsWith('filed by the CLI')),
+            );
+
+            // Only the note written here is judged: the carried one still waits.
+            await page.evaluate(() => window.__aynaResolve(2, 'approved'));
+            await page.waitForTimeout(1300);
+            seen.half = await card();
+            await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+            await page.waitForTimeout(1300);
+            seen.all = await card();
+            await page.close();
+          },
+        });
+
+        assert.equal(seen.outside, 'filed by the CLI | filed outside this window · in Tasks');
+        assert.deepEqual(seen.half, { cards: 1, pill: 'Your turn', carried: 'Also sends 1 earlier note' });
+        assert.equal(seen.all.pill, 'Approved');
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  test("a note's crop is the element, not ayna's chrome drawn over it", async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const site = path.join(dir, 'site');
+      await fixtureSite(site);
+      const out = path.join(dir, 'out');
+      const server = await serveStatic(site, 4748);
+      let orange = null;
+      try {
+        await runAnnotate({
+          browser,
+          url: server.url,
+          outDir: out,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onReady: async (page) => {
+            await page.click('.title');
+            await page.waitForSelector('.ayna-ov-pop textarea');
+            await page.fill('.ayna-ov-pop textarea', 'tighten this');
+            await page.click('.ayna-ov-save');
+            await page.waitForTimeout(500);
+            const png = await readFile(path.join(out, 'comment-01', 'region.png'));
+            // Count pixels in ayna's accent orange — the selection box, its label
+            // and the numbered pin. The fixture's headline is dark text on white.
+            orange = await page.evaluate(async (src) => {
+              const img = new Image();
+              img.src = src;
+              await img.decode();
+              const c = document.createElement('canvas');
+              c.width = img.width;
+              c.height = img.height;
+              const ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              const { data } = ctx.getImageData(0, 0, c.width, c.height);
+              let n = 0;
+              for (let i = 0; i < data.length; i += 4) {
+                const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+                if (r > 180 && g > 100 && g < 190 && b < 120) n += 1;
+              }
+              return n;
+            }, 'data:image/png;base64,' + png.toString('base64'));
+            await page.close();
+          },
+        });
+        assert.equal(orange, 0, `the crop has ${orange} pixels of ayna's own chrome in it`);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
   test('the comment box never hides under the mode bar', async () => {
     const { dir, dispose } = await tempDir();
     try {

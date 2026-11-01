@@ -3241,6 +3241,8 @@
   const cards = [];
   const cardOfTask = new Map();
   const noteOfTask = new Map();
+  // This window's tab, once asked; undefined until then, null when it has none.
+  let myTab;
 
   // Plain divs: this lives in the app's document, and an app is free to style
   // section and header — the demo pads every section by a screen's height.
@@ -3253,7 +3255,8 @@
       '<div class="' + NS + '-round-body"></div>';
     lines.appendChild(el);
     const card = {
-      el, body: el.querySelector('.' + NS + '-round-body'), tasks: new Map(), round: null, state: null, lastAt: '',
+      el, body: el.querySelector('.' + NS + '-round-body'), tasks: new Map(), raised: new Set(),
+      round: null, state: null, lastAt: '',
     };
     cards.push(card);
     setCard(card, state);
@@ -3484,10 +3487,26 @@
         else lines.appendChild(row);
         return true;
       }
+      /*
+        Only a note made in this window is a draft of its next round. One filed
+        from elsewhere — another window, the CLI, an import — is not going out
+        with anything sent from here, and drawing it as "Not sent yet" said
+        that it was.
+      */
+      noteOfTask.set(e.taskId, e.comment);
+      if (myTab && e.tabId !== myTab) {
+        const row = item({
+          who: e.source === 'claude' ? 'Claude' : 'ayna', lane: e.source === 'claude' ? 'claude' : 'ayna',
+          text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks',
+        });
+        if (last) addToCard(last, row);
+        else lines.appendChild(row);
+        return true;
+      }
       const card = last && last.state === 'drafting' ? last : newCard(lines, 'drafting');
       card.tasks.set(e.taskId, e.status ?? 'open');
+      card.raised.add(e.taskId);
       cardOfTask.set(e.taskId, card);
-      noteOfTask.set(e.taskId, e.comment);
       const row = addToCard(card, item({ who: 'You', lane: 'you', text: e.comment ?? '', detail: pageOf(e.url), at: e.at }));
       attachCrop(row, e.taskId);
       return true;
@@ -3517,9 +3536,17 @@
     if (e.event === 'round') {
       const card = last && last.state === 'drafting' ? last : newCard(lines, 'waiting');
       setCard(card, 'waiting', { round: e.round, at: e.at });
-      // Notes carried in from earlier — retries and work from another window —
-      // travel with this round but were not written in it.
-      const others = (e.open ?? 0) - [...card.tasks.values()].filter((v) => v !== 'approved').length;
+      // Every note the round carries is the round's to settle, wherever it was
+      // written — a retry, or work left open by another window.
+      for (const n of e.notes ?? []) {
+        card.tasks.set(n.taskId, 'open');
+        cardOfTask.set(n.taskId, card);
+        if (!noteOfTask.has(n.taskId)) noteOfTask.set(n.taskId, n.comment);
+      }
+      // Those carried in travel with this round but were not written in it.
+      const others = e.notes
+        ? e.notes.filter((n) => !card.raised.has(n.taskId)).length
+        : (e.open ?? 0) - card.raised.size;
       if (others > 0) {
         const p = document.createElement('p');
         p.className = NS + '-round-note';
@@ -3673,8 +3700,24 @@
     el.querySelector('button').hidden = !open;
   }
 
+  /*
+    One read of the feed at a time. The timer and an action that pumps straight
+    away can overlap, and two reads from the same cursor would draw the same
+    events twice.
+  */
+  let pumping = false;
   async function pumpConsole() {
-    if (!consoleEl || !window.__aynaFeed) return;
+    if (!consoleEl || !window.__aynaFeed || pumping) return;
+    pumping = true;
+    try {
+      await readFeed();
+    } finally {
+      pumping = false;
+    }
+  }
+
+  async function readFeed() {
+    if (myTab === undefined) myTab = (await window.__aynaState?.().catch(() => null))?.tab ?? null;
     const events = await window.__aynaFeed(consoleSeq).catch(() => []);
     if (!events || !events.length) return;
     // A verdict on carried-over work changes what the earlier line owes.

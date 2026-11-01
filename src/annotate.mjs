@@ -37,6 +37,18 @@ import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs'
  * pointed at it. Anything scrolled out falls back to the disruptive path, since a
  * silently truncated crop of what they framed would be worse than a flinch.
  */
+/*
+  ayna's own chrome, hidden for the length of a capture.
+
+  A crop is taken while the selection box, its label and the numbered pin are
+  drawn over the element, so every crop showed "p.text-sm ↑↓ select wider" and a
+  badge sitting on the very text the note was about — and that crop is what
+  Claude reads and what the activity rail shows. Everything ayna draws carries
+  data-ayna; the app's own elements never do, so this hides exactly the chrome.
+  `visibility`, not `display`, so nothing in the app moves.
+*/
+export const WITHOUT_CHROME = '[data-ayna] { visibility: hidden !important; }';
+
 export async function cropRegion(page, rect, pad) {
   const clip = {
     x: Math.max(0, rect.x - pad),
@@ -314,7 +326,7 @@ export async function runAnnotate({
     // Crop the exact region the user pointed at, with a little breathing room.
     const regionFile = path.join(dir, 'region.png');
     try {
-      await page.screenshot({ path: regionFile, ...(await cropRegion(page, payload.rect, 12)) });
+      await page.screenshot({ path: regionFile, style: WITHOUT_CHROME, ...(await cropRegion(page, payload.rect, 12)) });
     } catch {
       // An off-screen or zero-size target just means no crop; the comment still stands.
     }
@@ -656,6 +668,11 @@ export async function runAnnotate({
       round,
       comments: comments.length,
       open: comments.filter((c) => c.status !== 'approved').length,
+      // Which notes this round carries, including ones from earlier windows, so
+      // the round is not called approved while any of them is still unjudged.
+      notes: comments
+        .filter((c) => c.status !== 'approved' && c.taskId)
+        .map((c) => ({ taskId: c.taskId, comment: c.comment })),
       commentsFile,
       action: 'read-comments',
     });
@@ -919,7 +936,7 @@ export async function runAnnotate({
   */
   await page.exposeFunction('__aynaPreview', async (rect) => {
     try {
-      const buf = await page.screenshot(await cropRegion(page, rect, 8));
+      const buf = await page.screenshot({ style: WITHOUT_CHROME, ...(await cropRegion(page, rect, 8)) });
       return 'data:image/png;base64,' + buf.toString('base64');
     } catch {
       return null;
@@ -1040,6 +1057,8 @@ export async function runAnnotate({
   await page.exposeFunction('__aynaState', async () => ({
     phase,
     round,
+    // Lets the activity tell a note made here from one filed from elsewhere.
+    tab: tabId,
     count: comments.length,
     pending: comments.filter((c) => c.status !== 'approved').length,
     resumed,
