@@ -170,6 +170,35 @@ describe('importing work captured before the store existed', () => {
       await dispose();
     }
   });
+
+  test('a note a later window carried over is not imported a second time', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const store = await openStore(dir);
+      // Left open by Monday's window, which claimed its key as it was made.
+      const carried = await store.create({ comment: 'tighten the nav', status: 'open', legacyKey: 'monday#1' });
+
+      // Tuesday's window loads it with a number of its own, then writes its
+      // manifest: the carried note under that new number, beside a note of its own.
+      await legacySession(dir, 'tuesday', [
+        { n: 1, id: 1, taskId: carried.id, comment: 'tighten the nav', status: 'open' },
+        { n: 2, id: 2, comment: 'written before the store', status: 'open' },
+      ]);
+
+      const result = await importLegacy(dir, store);
+      assert.equal(result.imported, 1, 'only the record with no task behind it is new');
+      assert.deepEqual(
+        (await store.list()).map((t) => t.comment).sort(),
+        ['tighten the nav', 'written before the store'],
+      );
+
+      // Deleting the carried task must not let the manifest bring it back.
+      await store.remove(carried.id);
+      assert.equal((await importLegacy(dir, store)).imported, 0);
+    } finally {
+      await dispose();
+    }
+  });
 });
 
 describe('watching the store', () => {

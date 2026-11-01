@@ -419,6 +419,20 @@ export async function importLegacy(projectDir, store) {
     for (const c of data.comments ?? []) {
       const key = `${entry.name}#${c.id ?? c.n}`;
       if (seen.has(key)) continue;
+      /*
+        A record with a taskId is a window's view of a task, not a legacy note.
+
+        A window loads work still open from earlier windows and numbers it
+        afresh, so its manifest lists that work under keys nobody has claimed —
+        and every read adopted it as new. A review that ran `ayna comments` each
+        round grew a copy of every carried note per round. The task is already
+        in the store; and if it has since been deleted, adopting it again would
+        undo the deletion, which is what the ledger is here to prevent.
+      */
+      if (c.taskId) {
+        seen.add(key);
+        continue;
+      }
       // Old records used 'resolved'; the store's terminal state is 'approved'.
       const status = c.status === 'resolved' ? 'approved' : c.status === 'rejected' ? 'rejected' : 'open';
       await store.create(
