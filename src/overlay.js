@@ -450,6 +450,22 @@
     .${NS}-diff [data-t="+"] { color: var(--ayna-good, #7bc47f); }
     .${NS}-diff [data-t="-"] { color: var(--ayna-bad, #e0685f); }
     .${NS}-diff [data-t="…"] { color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-file.${NS}-gone span { text-decoration: line-through; color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-round[data-state=undone] .${NS}-pill { color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-round-acts {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px;
+      border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    }
+    .${NS}-round-acts button {
+      background: transparent; cursor: pointer; border-radius: 6px; padding: 3px 9px;
+      border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
+      color: var(--ayna-muted, rgba(255,255,255,.62)); font: 600 11.5px/1.4 -apple-system, system-ui, sans-serif;
+    }
+    .${NS}-round-acts button:hover { color: var(--ayna-text, #f4f2ef); border-color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-round-acts button[data-act=undo-confirm] { color: var(--ayna-warn, #e0a458); border-color: currentColor; }
+    .${NS}-round-acts button:disabled { opacity: .5; cursor: default; }
+    .${NS}-round-acts span { flex: 1 1 100%; color: var(--ayna-warn, #e0a458); font: 11.5px/1.45 -apple-system, system-ui, sans-serif; }
+    .${NS}-round-acts span:empty { display: none; }
     /*
       Neon, in the sense that matters: saturated ink on near-black.
 
@@ -3220,6 +3236,7 @@
     ready: 'Your turn',
     approved: 'Approved',
     sentback: 'Sent back',
+    undone: 'Undone',
   };
   const cards = [];
   const cardOfTask = new Map();
@@ -3383,6 +3400,70 @@
     return list;
   }
 
+  /*
+    The way back from a round, on the round.
+
+    Two steps, because it rewrites files: the first press says how many, the
+    second does it. A refusal is said in the card — which file changed since,
+    or why not now — rather than failing quietly, since the user pressed it
+    expecting their files back.
+  */
+  function undoControl(round, files) {
+    const acts = document.createElement('div');
+    acts.className = NS + '-round-acts';
+    const go = document.createElement('button');
+    go.type = 'button';
+    const keep = document.createElement('button');
+    keep.type = 'button';
+    keep.dataset.act = 'undo-keep';
+    keep.textContent = 'Keep';
+    const said = document.createElement('span');
+    const idle = () => {
+      go.dataset.act = 'undo';
+      go.textContent = 'Undo this round';
+      go.title = 'Put ' + plural(files.length, 'file') + ' back the way they were before this round';
+      go.disabled = false;
+      keep.remove();
+    };
+    idle();
+    acts.append(go, said);
+
+    keep.addEventListener('click', () => {
+      said.textContent = '';
+      idle();
+    });
+    go.addEventListener('click', async () => {
+      if (go.dataset.act === 'undo') {
+        go.dataset.act = 'undo-confirm';
+        go.textContent = 'Undo ' + plural(files.length, 'file');
+        said.textContent = '';
+        go.after(keep);
+        return;
+      }
+      go.disabled = true;
+      const done = await window.__aynaUndo?.(round).catch((err) => ({ ok: false, reason: err.message }));
+      if (done?.ok) {
+        // The changes are gone, so there is nothing left on the page to judge.
+        if (state.phase === 'review') {
+          clearReview();
+          state.seq = 0;
+          setPhase('comment');
+          window.__aynaMore();
+        }
+        pumpConsole();
+        return;
+      }
+      const names = (list) => list.map((f) => f.split('/').pop()).join(', ');
+      said.textContent = done?.conflicts?.length
+        ? 'Not undone: ' + names(done.conflicts) + ' changed after this round'
+        : done?.unknown?.length
+          ? 'Not undone: no copy of ' + names(done.unknown) + ' from before'
+          : 'Not undone: ' + (done?.reason ?? 'the window did not answer');
+      idle();
+    });
+    return acts;
+  }
+
   const roundCard = (round) => [...cards].reverse().find((c) => c.round === round) ?? cards.at(-1) ?? null;
 
   /** Draw one event. Returns false for anything the rail does not show. */
@@ -3453,6 +3534,7 @@
         text: files.length ? 'Finished · ' + plural(files.length, 'file') : 'Finished',
       }));
       if (files.length) row.appendChild(fileList(e.round, files));
+      card.files = files;
       setCard(card, 'ready');
       return true;
     }
@@ -3461,6 +3543,24 @@
       const card = roundCard(e.round);
       if (!card) return false;
       addToCard(card, item({ who: 'ayna', lane: 'ayna', at: e.at, ...gateWords(e) }));
+      // Offered once the round has finished landing — the check is the last
+      // step of that — so an undo never races the reload that shows the change.
+      if (card.files?.length && card.state !== 'undone' && !card.el.querySelector('.' + NS + '-round-acts')) {
+        card.el.appendChild(undoControl(e.round, card.files));
+      }
+      return true;
+    }
+
+    if (e.event === 'undone') {
+      const card = roundCard(e.round);
+      if (!card) return false;
+      addToCard(card, item({
+        who: 'You', lane: 'you', text: 'Undid this round', tone: 'warn', at: e.at,
+        detail: plural(e.files?.length ?? 0, 'file') + ' put back as they were',
+      }));
+      card.el.querySelector('.' + NS + '-round-acts')?.remove();
+      for (const f of card.el.querySelectorAll('.' + NS + '-file')) f.classList.add(NS + '-gone');
+      setCard(card, 'undone');
       return true;
     }
 

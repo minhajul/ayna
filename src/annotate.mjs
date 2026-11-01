@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { gotoSettled, reloadSettled } from './browser.mjs';
-import { snapshotProject, roundChanges, hunks } from './rounds.mjs';
+import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs';
 
 /**
  * Point-and-comment review on the live page.
@@ -538,6 +538,8 @@ export async function runAnnotate({
   const roundEdits = new Set();
   let roundSnapshot = null;
   const roundFiles = new Map();
+  // Which notes went out with each round, so undoing it can reopen them.
+  const roundNotes = new Map();
   let projectWatcher = null;
   const watchProject = () => {
     if (projectWatcher || !projectDir) return;
@@ -632,6 +634,7 @@ export async function runAnnotate({
     } catch {
       // Uncompared is still honest; the gate reports totals as it always has.
     }
+    roundNotes.set(round, comments.filter((c) => c.status !== 'approved').map((c) => c.id));
     // Read before anyone edits, and before Claude hears there is anything to do.
     roundEdits.clear();
     roundSnapshot = projectDir
@@ -703,6 +706,64 @@ export async function runAnnotate({
     } catch {
       return null;
     }
+  });
+
+  /*
+    Take a round back.
+
+    Rejecting a change does not undo it: "Needs work" asks for another attempt
+    on top of the one that missed, and the only way back to before was git, by
+    hand, outside the window. This restores exactly the files the round
+    changed, refuses if any of them has been edited since (see undoChanges),
+    and reopens the notes the round carried, because what they asked for is
+    still not done.
+
+    Not while Claude is working: a round in flight is writing the same files.
+  */
+  await page.exposeFunction('__aynaUndo', async (forRound) => {
+    const n = Number(forRound);
+    const changes = roundFiles.get(n);
+    if (!changes?.length) return { ok: false, reason: 'nothing to undo' };
+    if (phase === 'awaiting-claude') return { ok: false, reason: `Claude is working on round ${round}` };
+
+    const before = await appearanceOf();
+    const result = await undoChanges(projectDir, changes);
+    if (!result.ok) return result;
+    roundFiles.delete(n);
+
+    // Nothing is left on the page to judge. The overlay switches itself, but
+    // the window's own phase must not depend on that call coming back.
+    if (phase === 'reviewing') {
+      phase = 'commenting';
+      await rm(appliedFile, { force: true });
+    }
+
+    for (const id of roundNotes.get(n) ?? []) {
+      const c = comments.find((x) => x.id === id);
+      if (!c || c.status === 'open') continue;
+      c.status = 'open';
+      c.rounds.push({ round: n, status: 'open', via: 'undo' });
+      if (store && c.taskId) await store.update(c.taskId, { status: 'open' }, `round ${n} undone`, { tabId });
+    }
+    await writeManifest();
+    await writeStatus();
+    emit({ event: 'undone', round: n, files: result.restored, action: 'files-reverted' });
+
+    /*
+      Let the page show it. A dev server with hot reload already has; a static
+      one needs the reload. Same signature test as after a round, after a
+      moment for the dev server to notice — and not awaited, because the call
+      that asked for this is running inside the page being reloaded.
+    */
+    setTimeout(async () => {
+      if (page.isClosed()) return;
+      const after = await appearanceOf();
+      if (before && after && before.rules === after.rules) {
+        // The load handler puts the overlay back.
+        await reloadSettled(page).catch(() => {});
+      }
+    }, 1500);
+    return { ok: true, restored: result.restored };
   });
 
   // One file's diff from one round, as lines for the panel. See rounds.mjs.

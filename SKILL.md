@@ -129,13 +129,22 @@ notifications). It prints one JSON line every time the user does something:
 {"event":"round","round":1,"comments":2,"action":"read-comments"}
 {"event":"applied","round":1,"via":"marker"}
 {"event":"rejected","comment":"…","action":"retry-rejected"}
+{"event":"undone","round":1,"files":["src/app/page.tsx"],"action":"files-reverted"}
 {"event":"closed","approved":true}
 ```
 
 `applied` means the window has stopped waiting on you and the user is now judging
 the result. `via` says what ended the wait: `marker` if you ran `applied`,
 `file-change` if it saw your edits land, `user` if they pressed **Changes are in**
-because it could not.
+because it could not. `files` lists what the round changed — path, status and
+line counts, read from the files themselves — and is what the user sees in the
+round's card.
+
+`undone` means the user took that round back from the window. The files listed
+are exactly as they were before it, and the notes it carried are `open` again.
+Re-read those files before you touch them — what you remember writing is no
+longer there — and wait for the next `round` rather than redoing the work
+unasked.
 
 **This is the whole mechanism.** One process, push-based. There is nothing to
 re-arm and nothing to poll, so a round cannot go unnoticed because you forgot a

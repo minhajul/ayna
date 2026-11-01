@@ -2182,6 +2182,88 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
+  test('a round can be undone from its card, and not over later work', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      const { openStore } = await import('../src/tasks.mjs');
+      const site = path.join(dir, 'site');
+      await fixtureSite(site);
+      const css = path.join(site, 'styles.css');
+      const original = await readFile(css, 'utf8');
+      const out = path.join(dir, 'out');
+      const server = await serveStatic(site, 4746);
+      const store = await openStore(dir);
+      const events = [];
+      const seen = {};
+      try {
+        await runAnnotate({
+          browser,
+          store,
+          url: server.url,
+          outDir: out,
+          projectDir: site,
+          viewport: { width: 1100, height: 700 },
+          onEvent: (e) => events.push(e),
+          onReady: async (page) => {
+            await page.click('.title');
+            await page.waitForSelector('.ayna-ov-pop textarea');
+            await page.fill('.ayna-ov-pop textarea', 'tighten the headline');
+            await page.click('.ayna-ov-save');
+            await page.waitForTimeout(400);
+            await page.click('[data-act=send]');
+            await page.waitForTimeout(600);
+            await writeFile(css, original + '.title{letter-spacing:-0.02em}\n');
+            await writeFile(path.join(out, 'applied'), '1');
+            await page.waitForSelector('.ayna-ov-round [data-act=undo]', { timeout: 20000 });
+            await page.evaluate(() => window.__aynaResolve(1, 'approved'));
+
+            // Someone edits the same file again before the undo.
+            await writeFile(css, original + '.title{letter-spacing:-0.03em}\n');
+            await page.click('.ayna-ov-round [data-act=undo]');
+            await page.click('.ayna-ov-round [data-act=undo-confirm]');
+            await page.waitForFunction(() => document.querySelector('.ayna-ov-round-acts span')?.textContent, null, {
+              timeout: 5000,
+            });
+            seen.refused = await page.evaluate(() => document.querySelector('.ayna-ov-round-acts span').textContent);
+            seen.afterRefusal = await readFile(css, 'utf8');
+
+            // Put the round's version back, and the undo goes through.
+            await writeFile(css, original + '.title{letter-spacing:-0.02em}\n');
+            await page.click('.ayna-ov-round [data-act=undo]');
+            await page.click('.ayna-ov-round [data-act=undo-confirm]');
+            await page.waitForFunction(
+              () => document.querySelector('.ayna-ov-round')?.dataset.state === 'undone',
+              null,
+              { timeout: 10000 },
+            );
+            seen.card = await page.evaluate(() => ({
+              pill: document.querySelector('.ayna-ov-pill').textContent,
+              undoLeft: Boolean(document.querySelector('.ayna-ov-round [data-act=undo]')),
+            }));
+            seen.phase = await page.evaluate(() => window.__aynaState().then((s) => s.phase));
+            await page.close();
+          },
+        });
+
+        assert.equal(seen.refused, 'Not undone: styles.css changed after this round');
+        assert.equal(seen.afterRefusal, original + '.title{letter-spacing:-0.03em}\n', 'the later edit was left alone');
+        assert.equal(await readFile(css, 'utf8'), original, 'the stylesheet is back to before the round');
+        assert.deepEqual(seen.card, { pill: 'Undone', undoLeft: false });
+        assert.equal(seen.phase, 'commenting', 'with nothing left to judge, the window goes back to commenting');
+
+        const undone = events.find((e) => e.event === 'undone');
+        assert.deepEqual(undone.files, ['styles.css']);
+        assert.equal(undone.action, 'files-reverted');
+        const [task] = await store.list();
+        assert.equal(task.status, 'open', 'an approved note is owed again once its change is gone');
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
   test('the comment box never hides under the mode bar', async () => {
     const { dir, dispose } = await tempDir();
     try {

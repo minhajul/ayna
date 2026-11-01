@@ -1,4 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 /**
@@ -19,6 +20,7 @@ import path from 'node:path';
  */
 
 const posix = (rel) => rel.split(path.sep).join('/');
+const hash = (buf) => (buf === null ? null : createHash('sha1').update(buf).digest('hex'));
 
 /**
  * Read every text file under `root`, within a budget.
@@ -192,4 +194,37 @@ export async function roundChanges(snapshot, candidates) {
     });
   }
   return changes;
+}
+
+/**
+ * Put a round's files back the way they were before it.
+ *
+ * All or nothing, and only over files nobody has touched since. A file edited
+ * again after the round — by a later round, by hand, by a formatter — would
+ * lose that later work if it were simply overwritten, so the undo refuses and
+ * names it instead. Reverting good work silently is the one thing an undo must
+ * never do.
+ */
+export async function undoChanges(root, changes) {
+  const blocked = changes.filter((c) => !c.undoable).map((c) => c.file);
+  const conflicts = [];
+  for (const c of changes) {
+    if (!c.undoable) continue;
+    const now = await readFile(path.join(root, c.file)).catch(() => null);
+    if (hash(now) !== hash(c.after)) conflicts.push(c.file);
+  }
+  if (blocked.length || conflicts.length) return { ok: false, conflicts, unknown: blocked, restored: [] };
+
+  const restored = [];
+  for (const c of changes) {
+    const full = path.join(root, c.file);
+    if (c.before === null) {
+      await rm(full, { force: true });
+    } else {
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, c.before);
+    }
+    restored.push(c.file);
+  }
+  return { ok: true, conflicts: [], unknown: [], restored };
 }

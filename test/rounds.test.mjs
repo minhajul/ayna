@@ -8,10 +8,11 @@
 */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { snapshotProject, roundChanges, diffLines, hunks } from '../src/rounds.mjs';
+import { snapshotProject, roundChanges, diffLines, hunks, undoChanges } from '../src/rounds.mjs';
 import { tempDir } from './helpers.mjs';
 
 const TEXT = new Set(['.css', '.html', '.tsx', '.js']);
@@ -120,6 +121,67 @@ describe('what a round changed', () => {
       const [change] = await roundChanges(snap, [unread]);
       assert.equal(change.status, 'modified');
       assert.equal(change.before, undefined, 'there is no "before" to compare or restore');
+    } finally {
+      await dispose();
+    }
+  });
+});
+
+describe('taking a round back', () => {
+  async function editedRound() {
+    const { dir, dispose } = await tempDir();
+    await mkdir(path.join(dir, 'src'), { recursive: true });
+    await writeFile(path.join(dir, 'src', 'a.css'), 'h1 { color: red }\n');
+    await writeFile(path.join(dir, 'src', 'gone.js'), 'old\n');
+    const snap = await snapshotProject(dir, { skipDirs: SKIP, textExt: TEXT });
+    await writeFile(path.join(dir, 'src', 'a.css'), 'h1 { color: blue }\n');
+    await rm(path.join(dir, 'src', 'gone.js'));
+    await mkdir(path.join(dir, 'src', 'new'), { recursive: true });
+    await writeFile(path.join(dir, 'src', 'new', 'b.tsx'), 'export {};\n');
+    const changes = await roundChanges(snap, ['src/a.css', 'src/gone.js', 'src/new/b.tsx']);
+    return { dir, dispose, changes };
+  }
+
+  test('puts every file back: edited, deleted and added alike', async () => {
+    const { dir, dispose, changes } = await editedRound();
+    try {
+      const result = await undoChanges(dir, changes);
+      assert.deepEqual(result.restored.sort(), ['src/a.css', 'src/gone.js', 'src/new/b.tsx']);
+      assert.equal(await readFile(path.join(dir, 'src', 'a.css'), 'utf8'), 'h1 { color: red }\n');
+      assert.equal(await readFile(path.join(dir, 'src', 'gone.js'), 'utf8'), 'old\n');
+      assert.equal(existsSync(path.join(dir, 'src', 'new', 'b.tsx')), false, 'a file the round made is removed');
+    } finally {
+      await dispose();
+    }
+  });
+
+  test('refuses, and writes nothing, when a file has moved on since the round', async () => {
+    const { dir, dispose, changes } = await editedRound();
+    try {
+      // A later edit to one of the round's files: overwriting it would lose that work.
+      await writeFile(path.join(dir, 'src', 'a.css'), 'h1 { color: green }\n');
+      const result = await undoChanges(dir, changes);
+      assert.equal(result.ok, false);
+      assert.deepEqual(result.conflicts, ['src/a.css']);
+      assert.equal(existsSync(path.join(dir, 'src', 'gone.js')), false, 'all or nothing: no other file was restored');
+      assert.equal(await readFile(path.join(dir, 'src', 'a.css'), 'utf8'), 'h1 { color: green }\n');
+    } finally {
+      await dispose();
+    }
+  });
+
+  test('refuses a file it never had a copy of', async () => {
+    const { dir, dispose } = await tempDir();
+    try {
+      await writeFile(path.join(dir, 'a.css'), 'a\n');
+      await writeFile(path.join(dir, 'b.css'), 'b\n');
+      const snap = await snapshotProject(dir, { textExt: TEXT, maxFiles: 1 });
+      const unread = ['a.css', 'b.css'].find((f) => !snap.files.has(f));
+      await writeFile(path.join(dir, unread), 'changed\n');
+      const result = await undoChanges(dir, await roundChanges(snap, [unread]));
+      assert.equal(result.ok, false);
+      assert.deepEqual(result.unknown, [unread]);
+      assert.equal(await readFile(path.join(dir, unread), 'utf8'), 'changed\n');
     } finally {
       await dispose();
     }
