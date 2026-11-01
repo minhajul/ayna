@@ -727,6 +727,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await page.evaluate(() => window.__aynaResolve(1, 'approved'));
       const { appendEvent, openDb } = await import('../src/db.mjs');
       appendEvent(await openDb(dir), { event: 'message', from: 'claude', text: 'tidied the spacing too' });
+      await (await openStore(dir)).create({ status: 'proposed', kind: 'proposal', comment: 'try a darker blue', source: 'claude', url: null });
       await page.waitForTimeout(1500);
 
       // The next round begins, and the approved one folds by itself.
@@ -736,14 +737,16 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await page.waitForTimeout(1300);
       seen = await page.evaluate(() => {
         const line = [...document.querySelectorAll('.ayna-ov-line')].find((n) => n.textContent.includes('tidied the spacing too'));
+        const idea = [...document.querySelectorAll('.ayna-ov-item')].find((n) => n.textContent.includes('try a darker blue'));
         return {
           folded: document.querySelector('.ayna-ov-round').hasAttribute('data-folded'),
           inCard: Boolean(line?.closest('.ayna-ov-round')),
           shown: Boolean(line && line.getClientRects().length),
+          suggestionShown: Boolean(idea && !idea.closest('.ayna-ov-round') && idea.getClientRects().length),
         };
       });
     });
-    assert.deepEqual(seen, { folded: true, inCard: false, shown: true });
+    assert.deepEqual(seen, { folded: true, inCard: false, shown: true, suggestionShown: true });
   });
 
   test('a finished round folds when the next one starts, and opens again on a click', async () => {

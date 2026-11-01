@@ -3839,8 +3839,8 @@
           who: ours ? 'ayna' : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
           detail: 'a suggestion · waiting for your word',
         });
-        if (last) addToCard(last, row);
-        else lines.appendChild(row);
+        // Not the round's, so not in its card, where it would fold away unseen.
+        lines.appendChild(row);
         return true;
       }
       /*
@@ -3856,8 +3856,7 @@
         const [who, lane] =
           e.source === 'claude' ? ['Claude', 'claude'] : e.source && e.source !== 'user' ? ['ayna', 'ayna'] : ['You', 'you'];
         const row = item({ who, lane, text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks' });
-        if (last) addToCard(last, row);
-        else lines.appendChild(row);
+        lines.appendChild(row);
         return true;
       }
       const card = last && last.state === 'drafting' ? last : newCard(lines, 'drafting', e.seq);
