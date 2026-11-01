@@ -2123,66 +2123,7 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
     }
   });
 
-  test('a round lists the files it changed, and each opens to its diff', async () => {
-    const { dir, dispose } = await tempDir();
-    try {
-      const { openStore } = await import('../src/tasks.mjs');
-      const site = path.join(dir, 'site');
-      await fixtureSite(site);
-      const out = path.join(dir, 'out');
-      const server = await serveStatic(site, 4745);
-      const events = [];
-      let shown = null;
-      try {
-        await runAnnotate({
-          browser,
-          store: await openStore(dir),
-          url: server.url,
-          outDir: out,
-          projectDir: site,
-          viewport: { width: 1100, height: 700 },
-          onEvent: (e) => events.push(e),
-          onReady: async (page) => {
-            await page.click('.title');
-            await page.waitForSelector('.ayna-ov-pop textarea');
-            await page.fill('.ayna-ov-pop textarea', 'tighten the headline');
-            await page.click('.ayna-ov-save');
-            await page.waitForTimeout(400);
-            await page.click('[data-act=send]');
-            await page.waitForTimeout(600);
-
-            // Claude's edit, and a file it saved without changing.
-            const css = path.join(site, 'styles.css');
-            await writeFile(css, (await readFile(css, 'utf8')) + '.title{letter-spacing:-0.02em}\n');
-            await writeFile(path.join(site, 'index.html'), await readFile(path.join(site, 'index.html'), 'utf8'));
-            await writeFile(path.join(out, 'applied'), '1');
-
-            await page.waitForSelector('.ayna-ov-round .ayna-ov-file', { timeout: 20000 });
-            await page.click('.ayna-ov-round .ayna-ov-file');
-            await page.waitForSelector('.ayna-ov-diff', { timeout: 5000 });
-            shown = await page.evaluate(() => ({
-              finished: [...document.querySelectorAll('.ayna-ov-round .ayna-ov-item[data-lane=claude] > span')].map((s) => s.textContent),
-              files: [...document.querySelectorAll('.ayna-ov-file')].map((f) => f.textContent),
-              diff: [...document.querySelectorAll('.ayna-ov-diff div')].map((d) => d.dataset.t + d.textContent),
-            }));
-            await page.close();
-          },
-        });
-
-        const applied = events.find((e) => e.event === 'applied');
-        assert.deepEqual(applied.files, [{ file: 'styles.css', status: 'modified', added: 1, removed: 0 }]);
-        assert.deepEqual(shown.finished, ['Finished · 1 file']);
-        assert.deepEqual(shown.files, ['styles.css+1']);
-        assert.ok(shown.diff.includes('++ .title{letter-spacing:-0.02em}'), shown.diff.join('\n'));
-      } finally {
-        await server.close();
-      }
-    } finally {
-      await dispose();
-    }
-  });
-
-  test('a round can be undone from its card, and not over later work', async () => {
+  test('a round lists the files it changed, opens each to its diff, and can be undone, but not over later work', async () => {
     const { dir, dispose } = await tempDir();
     try {
       const { openStore } = await import('../src/tasks.mjs');
@@ -2191,7 +2132,7 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
       const css = path.join(site, 'styles.css');
       const original = await readFile(css, 'utf8');
       const out = path.join(dir, 'out');
-      const server = await serveStatic(site, 4746);
+      const server = await serveStatic(site, 4745);
       const store = await openStore(dir);
       const events = [];
       const seen = {};
@@ -2212,8 +2153,21 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
             await page.waitForTimeout(400);
             await page.click('[data-act=send]');
             await page.waitForTimeout(600);
+
+            // Claude's edit, and a file it saved without changing.
             await writeFile(css, original + '.title{letter-spacing:-0.02em}\n');
+            await writeFile(path.join(site, 'index.html'), await readFile(path.join(site, 'index.html'), 'utf8'));
             await writeFile(path.join(out, 'applied'), '1');
+
+            await page.waitForSelector('.ayna-ov-round .ayna-ov-file', { timeout: 20000 });
+            await page.click('.ayna-ov-round .ayna-ov-file');
+            await page.waitForSelector('.ayna-ov-diff', { timeout: 5000 });
+            seen.shown = await page.evaluate(() => ({
+              finished: [...document.querySelectorAll('.ayna-ov-round .ayna-ov-item[data-lane=claude] > span')].map((s) => s.textContent),
+              files: [...document.querySelectorAll('.ayna-ov-file')].map((f) => f.textContent),
+              diff: [...document.querySelectorAll('.ayna-ov-diff div')].map((d) => d.dataset.t + d.textContent),
+            }));
+
             await page.waitForSelector('.ayna-ov-round [data-act=undo]', { timeout: 20000 });
             await page.evaluate(() => window.__aynaResolve(1, 'approved'));
             // A card left over from another process asks with that process's key.
@@ -2246,6 +2200,12 @@ describe('the loop keeps itself going', { skip: !hasBrowser && 'AYNA_SKIP_BROWSE
             await page.close();
           },
         });
+
+        const applied = events.find((e) => e.event === 'applied');
+        assert.deepEqual(applied.files, [{ file: 'styles.css', status: 'modified', added: 1, removed: 0 }]);
+        assert.deepEqual(seen.shown.finished, ['Finished · 1 file']);
+        assert.deepEqual(seen.shown.files, ['styles.css+1']);
+        assert.ok(seen.shown.diff.includes('++ .title{letter-spacing:-0.02em}'), seen.shown.diff.join('\n'));
 
         assert.deepEqual(seen.stale, { ok: false, reason: 'that round was in an earlier window' });
         assert.equal(seen.refused, 'Not undone: styles.css changed after this round');

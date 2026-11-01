@@ -540,11 +540,18 @@ describe('ending a review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, ()
     assert.match(labels[2], /nothing left to do/, 'the sentence carries the state, not the button');
   });
 
-  test('closing can be taken back', async () => {
-    // One click used to end the review and take the window with it, and the only
-    // undo was to start again and re-judge everything.
+  test('closing can be taken back, and a reload cannot stop it', async () => {
+    /*
+      One click used to end the review and take the window with it, and the only
+      undo was to start again and re-judge everything. Then the countdown lived
+      only in the page, so a reload in that moment — a dev server's full reload,
+      or the overlay reloading itself — threw it away, and the window stayed
+      open for good after Close. A scripted review waited on it forever, which
+      is what hung this file.
+    */
     let stillOpen = null;
     let midway = null;
+    let ended = null;
     await reviewing(async (page) => {
       await page.click('[data-act=close]');
       await page.waitForTimeout(400);
@@ -553,20 +560,7 @@ describe('ending a review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, ()
       // Past the 1.5s countdown, which Node holds: Stay has to cancel it there.
       await page.waitForTimeout(2200);
       stillOpen = !page.isClosed();
-    });
-    assert.match(midway, /Closing the review/);
-    assert.equal(stillOpen, true, 'Stay open did not keep the window');
-  });
 
-  test('a reload during the close countdown still ends the review', async () => {
-    /*
-      The countdown lived only in the page, so a reload in that moment — a dev
-      server's full reload, or the overlay reloading itself — threw it away. The
-      user had pressed Close and the window stayed open for good; a scripted
-      review waited on it forever, which is what hung this file.
-    */
-    let ended = null;
-    await reviewing(async (page) => {
       await page.click('[data-act=close]');
       await page.reload();
       ended = await page.waitForEvent('close', { timeout: 8000 }).then(
@@ -574,7 +568,9 @@ describe('ending a review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, ()
         () => false,
       );
     });
-    assert.equal(ended, true, 'the window stayed open after Close');
+    assert.match(midway, /Closing the review/);
+    assert.equal(stillOpen, true, 'Stay open did not keep the window');
+    assert.equal(ended, true, 'a reload during the countdown left the window open after Close');
   });
 });
 
@@ -749,36 +745,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.ok(judged.lines.includes('You: make it bigger'), judged.lines.join(' | '));
   });
 
-  test('a message is never folded away inside a round', async () => {
-    let seen = null;
-    await withConsole(async (page, dir) => {
-      await note(page, 'make it bigger');
-      await approvedRound(page, dir);
-      const { appendEvent, openDb } = await import('../src/db.mjs');
-      appendEvent(await openDb(dir), { event: 'message', from: 'claude', text: 'tidied the spacing too' });
-      await (await openStore(dir)).create({ status: 'proposed', kind: 'proposal', comment: 'try a darker blue', source: 'claude', url: null });
-      await page.waitForTimeout(1500);
-
-      // The next round begins, and the approved one folds by itself.
-      await page.click('[data-act=more]');
-      await page.waitForTimeout(400);
-      await note(page, 'and bolder');
-      await page.waitForTimeout(1300);
-      seen = await page.evaluate(() => {
-        const line = [...document.querySelectorAll('.ayna-ov-line')].find((n) => n.textContent.includes('tidied the spacing too'));
-        const idea = [...document.querySelectorAll('.ayna-ov-item')].find((n) => n.textContent.includes('try a darker blue'));
-        return {
-          folded: document.querySelector('.ayna-ov-round').hasAttribute('data-folded'),
-          inCard: Boolean(line?.closest('.ayna-ov-round')),
-          shown: Boolean(line && line.getClientRects().length),
-          suggestionShown: Boolean(idea && !idea.closest('.ayna-ov-round') && idea.getClientRects().length),
-        };
-      });
-    });
-    assert.deepEqual(seen, { folded: true, inCard: false, shown: true, suggestionShown: true });
-  });
-
-  test('a finished round folds when the next one starts, and opens again on a click', async () => {
+  test('a finished round folds when the next one starts, opens again on a click, and folds no message away', async () => {
     const seen = {};
     await withConsole(async (page, dir) => {
       const rounds = () =>
@@ -793,7 +760,11 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
 
       await note(page, 'make it bigger');
       await approvedRound(page, dir);
-      await page.waitForTimeout(1300);
+      // Said to the window, not to the round: these must not fold away with it.
+      const { appendEvent, openDb } = await import('../src/db.mjs');
+      appendEvent(await openDb(dir), { event: 'message', from: 'claude', text: 'tidied the spacing too' });
+      await (await openStore(dir)).create({ status: 'proposed', kind: 'proposal', comment: 'try a darker blue', source: 'claude', url: null });
+      await page.waitForTimeout(1500);
       seen.judged = await rounds();
 
       // The next round begins: the approved one gets out of the way.
@@ -802,6 +773,13 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await note(page, 'and bolder');
       await page.waitForTimeout(1300);
       seen.next = await rounds();
+      seen.loose = await page.evaluate(() => {
+        const shown = (el) => Boolean(el && !el.closest('.ayna-ov-round') && el.getClientRects().length);
+        return {
+          message: shown([...document.querySelectorAll('.ayna-ov-line')].find((n) => n.textContent.includes('tidied the spacing too'))),
+          suggestion: shown([...document.querySelectorAll('.ayna-ov-item')].find((n) => n.textContent.includes('try a darker blue'))),
+        };
+      });
 
       await page.click('.ayna-ov-round-head');
       seen.clicked = (await rounds())[0];
@@ -824,24 +802,11 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       [['Round 1', true], ['Next round', false]],
     );
     assert.equal(seen.next[0].sum, '1 note', 'folded, it still says what it held');
+    assert.deepEqual(seen.loose, { message: true, suggestion: true }, 'a message or suggestion stays in view, outside the folded card');
     assert.equal(seen.next[0].expanded, 'false');
     assert.equal(seen.clicked.folded, false);
     assert.equal(seen.keyed.folded, true, 'Enter on the header folds it, like a click');
     assert.equal(seen.reloaded.folded, false);
-  });
-
-  test('everything in the rail starts on one edge', async () => {
-    let edges = null;
-    await withConsole(async (page) => {
-      edges = await page.evaluate(() => {
-        const rail = document.querySelector('.ayna-ov-console').getBoundingClientRect().left;
-        const at = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left - rail);
-        return { header: at('.ayna-ov-dotlive'), empty: at('.ayna-ov-empty-lead'), say: at('.ayna-ov-say-box') };
-      });
-    });
-    // The task panel's empty state shares a class with the rail's, and its
-    // padding once leaked in and pushed the rail's 14px further in than the rest.
-    assert.deepEqual(edges, { header: edges.header, empty: edges.header, say: edges.header });
   });
 
   test('never covers the app, open or minimised', async () => {
@@ -883,9 +848,16 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     });
   });
 
-  test('the task list hangs under the bar and closes like a menu', async () => {
+  test('the rail starts on one edge, and the task list hangs under the bar and closes like a menu', async () => {
     const seen = {};
     await withConsole(async (page) => {
+      // Measured first, while the rail still shows its empty state.
+      seen.edges = await page.evaluate(() => {
+        const rail = document.querySelector('.ayna-ov-console').getBoundingClientRect().left;
+        const at = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left - rail);
+        return { header: at('.ayna-ov-dotlive'), empty: at('.ayna-ov-empty-lead'), say: at('.ayna-ov-say-box') };
+      });
+
       const open = () => page.evaluate(() => Boolean(document.querySelector('.ayna-ov-panel')));
       await page.click('[data-act=tasks]');
       await page.waitForSelector('.ayna-ov-panel');
@@ -907,7 +879,14 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
       await page.click('[data-act=tasks]');
       seen.toggled = await open();
     });
-    assert.deepEqual(seen, { gap: 6, outside: false, inside: true, escape: false, toggled: false });
+    // The task panel's empty state shares a class with the rail's, and its
+    // padding once leaked in and pushed the rail's 14px further in than the rest.
+    const { header } = seen.edges;
+    assert.deepEqual(seen.edges, { header, empty: header, say: header });
+    assert.deepEqual(
+      { gap: seen.gap, outside: seen.outside, inside: seen.inside, escape: seen.escape, toggled: seen.toggled },
+      { gap: 6, outside: false, inside: true, escape: false, toggled: false },
+    );
   });
 
   test('typing in it does not reach the page underneath', async () => {
