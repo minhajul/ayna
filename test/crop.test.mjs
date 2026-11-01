@@ -46,6 +46,23 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
 
   const drain = () => page.evaluate(() => window.__resizes.splice(0));
 
+  const pixelAt = (buf, x, y) =>
+    page.evaluate(
+      async ([u, px, py]) => {
+        const img = new Image();
+        img.src = u;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(px, py, 1, 1).data;
+        return `${d[0]},${d[1]},${d[2]}`;
+      },
+      ['data:image/png;base64,' + buf.toString('base64'), x, y],
+    );
+
   const middlePixel = (buf) =>
     page.evaluate(async (u) => {
       const img = new Image();
@@ -110,10 +127,11 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
       // Written the way the overlay writes it: the rail's width is a clamp() of
       // the window, which a custom property hands back unresolved.
       await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:var(--ayna-rail-inset, clamp(150px, 25vw, 400px))"><body style="margin:0">
-        <div class="ayna-ov-bar" data-ayna="1" style="position:fixed;top:0;left:200px;right:0;height:50px;background:#000"></div>
+        <div id="nav" style="position:absolute;top:50px;left:204px;width:300px;height:40px;background:rgb(255,0,0)"></div>
+        <div class="ayna-ov-bar" data-ayna="1" style="position:fixed;top:0;left:200px;right:0;height:50px;background:#000;box-shadow:0 1px 12px rgba(0,0,0,.6)"></div>
         <div class="ayna-ov-console" data-ayna="1" style="position:fixed;top:0;bottom:0;left:0;width:clamp(150px, 25vw, 400px);background:#000"></div>
-        <div id="nav" style="position:absolute;top:52px;left:204px;width:300px;height:40px;background:rgb(255,0,0)"></div>
-        <div class="ayna-ov-hl" data-ayna="1" style="position:fixed;top:52px;left:204px;width:300px;height:40px;outline:2px solid orange"></div>
+        <div class="ayna-ov-tag" data-ayna="1" style="position:fixed;top:28px;left:204px;width:200px;height:22px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.8)"></div>
+        <div class="ayna-ov-hl" data-ayna="1" style="position:fixed;top:50px;left:204px;width:300px;height:40px;outline:2px solid orange"></div>
       </body></html>`);
       const rect = await chrome.evaluate(() => {
         const r = document.querySelector('#nav').getBoundingClientRect();
@@ -123,13 +141,22 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
       assert.equal(opts.fullPage, false);
       assert.ok(opts.clip.y >= 50 && opts.clip.x >= 200, `the padding stops at the app's edge: ${JSON.stringify(opts.clip)}`);
 
+      // The label above the element and the bar both cast shadows into the crop.
+      const top = await pixelAt(await chrome.screenshot(opts), 20, 2);
+      assert.equal(top, '255,0,0', "no shadow of ayna's falls across the top of the crop");
+
       await chrome.addStyleTag({ content: opts.style });
-      const hidden = await chrome.evaluate(() =>
-        [...document.querySelectorAll('[data-ayna]')]
-          .filter((el) => getComputedStyle(el).visibility === 'hidden')
-          .map((el) => el.className),
+      const after = await chrome.evaluate(() =>
+        [...document.querySelectorAll('[data-ayna]')].map((el) => {
+          const cs = getComputedStyle(el);
+          return `${el.className}:${cs.visibility}:${cs.boxShadow === 'none' ? 'flat' : 'shadow'}`;
+        }),
       );
-      assert.deepEqual(hidden, ['ayna-ov-hl'], 'only the mark drawn over the element is hidden for the capture');
+      assert.deepEqual(
+        after,
+        ['ayna-ov-bar:visible:flat', 'ayna-ov-console:visible:flat', 'ayna-ov-tag:visible:flat', 'ayna-ov-hl:hidden:flat'],
+        'only the mark over the element is hidden; what sits beside the crop keeps its place and loses only its shadow',
+      );
     } finally {
       await chrome.close();
     }

@@ -55,17 +55,30 @@ import { snapshotProject, roundChanges, hunks, undoChanges } from './rounds.mjs'
   still hides everything.
 */
 export const WITHOUT_CHROME = '[data-ayna] { visibility: hidden !important; }';
-const WITHOUT_MARKED = '[data-ayna-crop] { visibility: hidden !important; }';
+const WITHOUT_MARKED =
+  '[data-ayna-crop] { visibility: hidden !important; } [data-ayna-near] { box-shadow: none !important; }';
 
-/** Mark ayna's elements that overlap a viewport clip, and nothing else. */
+/*
+  Mark ayna's elements that overlap a viewport clip, and nothing else — plus
+  the ones just outside it, whose shadows reach in. The selection's label sits
+  right above the element, and its shadow put a dark smudge along the top of
+  every crop of a nav. Those keep their place and lose only the shadow, for the
+  length of the capture. 32px is further than any shadow ayna draws.
+*/
 async function markInCrop(page, clip) {
   const marked = await page
     .evaluate((c) => {
-      for (const el of document.querySelectorAll('[data-ayna-crop]')) el.removeAttribute('data-ayna-crop');
+      const reach = 32;
+      for (const el of document.querySelectorAll('[data-ayna-crop], [data-ayna-near]')) {
+        el.removeAttribute('data-ayna-crop');
+        el.removeAttribute('data-ayna-near');
+      }
       for (const el of document.querySelectorAll('[data-ayna]')) {
         const r = el.getBoundingClientRect();
-        const overlaps = r.right > c.x && r.left < c.x + c.width && r.bottom > c.y && r.top < c.y + c.height;
-        if (r.width && r.height && overlaps) el.setAttribute('data-ayna-crop', '');
+        if (!r.width || !r.height) continue;
+        const within = (m) => r.right > c.x - m && r.left < c.x + c.width + m && r.bottom > c.y - m && r.top < c.y + c.height + m;
+        if (within(0)) el.setAttribute('data-ayna-crop', '');
+        else if (within(reach)) el.setAttribute('data-ayna-near', '');
       }
       return true;
     }, clip)
