@@ -19,6 +19,7 @@ import { promisify } from 'node:util';
 import { openBrowser } from '../src/browser.mjs';
 import { serveStatic } from '../src/server.mjs';
 import { runAnnotate } from '../src/annotate.mjs';
+import { DEFAULT_THEME } from '../src/config.mjs';
 import { openStore } from '../src/tasks.mjs';
 
 const exec = promisify(execFile);
@@ -46,6 +47,8 @@ async function main() {
 
   const done = runAnnotate({
     browser,
+    // What every real install renders; see DEFAULT_THEME in config.mjs.
+    theme: DEFAULT_THEME,
     url: server.url,
     outDir: path.join(dir, 'out'),
     projectDir: site,

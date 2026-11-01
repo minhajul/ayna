@@ -1105,11 +1105,22 @@ export async function runAnnotate({
           return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
         };
 
+        /*
+          Whichever ink actually reads better, measured, not a luminance cut-off.
+
+          The cut-off was 0.4, on the belief that black overtakes white there.
+          It overtakes at about 0.18 — where (L+0.05)/0.05 meets 1.05/(L+0.05).
+          ayna's own accent sits at 0.37, between the two, so every install got
+          white on orange at 2.5:1 for its one call to action, and the active
+          mode, which borrows this ink, went white on ivory and disappeared.
+        */
+        const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        const INK_DARK = luminance('#0a0a0a');
         for (const key of ['accent', 'good', 'bad', 'warn', 'live']) {
           const l = luminance(t[key]);
           if (l === null) continue;
-          // 0.4 is where black overtakes white against a mid tone.
-          document.documentElement.style.setProperty('--ayna-on-' + key, l > 0.4 ? '#0a0a0a' : '#ffffff');
+          const dark = ratio(l, INK_DARK) >= ratio(l, 1);
+          document.documentElement.style.setProperty('--ayna-on-' + key, dark ? '#0a0a0a' : '#ffffff');
         }
       }, theme)
       .catch(() => {});

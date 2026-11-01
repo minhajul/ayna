@@ -82,13 +82,19 @@
       Full width across the top, and the page is moved down to make room, so the
       bar covers nothing at all rather than covering something less important.
     */
+    /*
+      52px, the rail's header height too, so the two bottom edges meet in one
+      line across the window instead of stepping down 15px at the rail's edge.
+    */
     .${NS}-bar {
       position: fixed; z-index: 2147483647; left: var(--ayna-inset-left, 0px); right: 0; top: 0;
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 16px;
       flex-wrap: wrap; justify-content: center;
-      background: var(--ayna-bar, #0d0d0f); color: var(--ayna-text, #f4f2ef); padding: 10px 16px;
+      min-height: 52px; box-sizing: border-box;
+      background: var(--ayna-bar, #0d0d0f); color: var(--ayna-text, #f4f2ef); padding: 8px 16px;
+      border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075));
       font: 13px/1.4 -apple-system, system-ui, sans-serif;
-      box-shadow: 0 2px 18px rgba(0,0,0,.35);
+      box-shadow: 0 1px 12px rgba(0,0,0,.18);
     }
     /* Left group, mode group, actions: the bar is a layout, not a queue. */
     .${NS}-bar > .${NS}-barside { display: flex; align-items: center; gap: 10px; flex: 1 1 0; }
@@ -104,14 +110,22 @@
     */
     .${NS}-bar button { white-space: nowrap; }
     .${NS}-bar > .${NS}-barside:not(.${NS}-baractions) { min-width: 0; }
+    /* A mark, the name, then a hairline before what the window is doing. */
     .${NS}-brand {
-      font-weight: 700; letter-spacing: .02em; opacity: .55; text-transform: lowercase;
+      display: inline-flex; align-items: center; gap: 8px; flex: none;
+      padding-right: 12px; border-right: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+      font-weight: 700; letter-spacing: .01em; text-transform: lowercase; color: var(--ayna-text, #f4f2ef);
     }
-    .${NS}-hint { opacity: .62; }
+    .${NS}-brand::before {
+      content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--ayna-accent, #de9446);
+    }
+    .${NS}-hint { color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-hint.${NS}-warn { color: var(--ayna-warn, #e0a458); }
     .${NS}-bar .${NS}-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* A segmented control: which mode is on is a fact, not something to infer. */
     .${NS}-modes {
-      display: flex; gap: 2px; background: rgba(255,255,255,.06); border-radius: 999px; padding: 2px;
+      display: flex; gap: 2px; padding: 3px; border-radius: 10px;
+      background: rgba(255,255,255,.04); border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
     }
 
     /* The crop leads the box: on a canvas it is the entire comment. */
@@ -215,7 +229,8 @@
     .${NS}-grip:hover::after, .${NS}-grip.${NS}-dragging::after { background: var(--ayna-accent, #de9446); }
     .${NS}-console.${NS}-min .${NS}-grip { display: none; }
     .${NS}-console-head {
-      display: flex; align-items: center; gap: 7px; padding: 8px 14px; flex-wrap: wrap;
+      display: flex; align-items: center; align-content: center; gap: 7px; padding: 8px 14px; flex-wrap: wrap;
+      min-height: 52px; box-sizing: border-box;
       border-bottom: 1px solid var(--ayna-line, rgba(255,255,255,.075)); flex: none;
       font: 600 12px/1.4 -apple-system, system-ui, sans-serif;
     }
@@ -552,25 +567,74 @@
     }
     .${NS}-console.${NS}-min .${NS}-console-lines,
     .${NS}-console.${NS}-min .${NS}-console-say { display: none; }
+    /*
+      One button shape for the whole bar: 32px, 8px corners. The fill says what
+      kind it is — the accent for the one action that moves the round on, an
+      outline for everything that only opens or switches something.
+    */
     .${NS}-bar button {
-      font: inherit; font-weight: 600; border: 0; border-radius: 999px;
-      padding: 6px 14px; cursor: pointer; background: var(--ayna-accent, #de9446);
+      display: inline-flex; align-items: center; gap: 7px; height: 32px; box-sizing: border-box;
+      font: inherit; font-weight: 600; border: 1px solid transparent; border-radius: 8px;
+      padding: 0 14px; cursor: pointer; background: var(--ayna-accent, #de9446);
       color: var(--ayna-on-accent, #0a0a0a);
+      transition: background-color .15s, border-color .15s, color .15s, filter .15s;
     }
+    .${NS}-bar button:hover { filter: brightness(1.08); }
+    .${NS}-bar button:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: 2px; }
     /*
       After the generic rule on purpose: same specificity, so source order
       decides. Written above it, every unselected mode inherited the primary blue,
       and the bar showed four buttons all claiming to be the main action.
     */
+    /*
+      The mode that is on is a raised pill with full-strength ink and its icon
+      lit in the accent; the others are muted until hovered.
+
+      It used to be an ivory pill inked with --ayna-on-accent, which is the ink
+      for the orange, not for ivory. Whenever that came out white — as it did
+      for ayna's own accent — the selected mode had no visible label at all.
+    */
     .${NS}-modes button {
-      background: transparent; color: var(--ayna-text, #f4f2ef); font-weight: 600;
-      padding: 5px 13px; border-radius: 999px;
+      height: 28px; padding: 0 12px; border: 0; border-radius: 7px; gap: 6px;
+      background: transparent; color: var(--ayna-muted, rgba(255,255,255,.62)); font-weight: 600;
     }
-    .${NS}-modes button:hover { background: rgba(255,255,255,.12); color: var(--ayna-text, #f4f2ef); }
-    .${NS}-modes button.${NS}-on { background: var(--ayna-text, #f4f2ef); color: var(--ayna-on-accent, #0a0a0a); }
-    .${NS}-count { opacity: .7; }
-    .${NS}-progress { font-weight: 600; opacity: .8; }
-    .${NS}-progress.${NS}-done { color: var(--ayna-good, #7bc47f); opacity: 1; }
+    .${NS}-modes button svg { width: 14px; height: 14px; flex: none; }
+    /*
+      Short of room, the modes keep their icons and drop their words — the
+      names stay as tooltips and accessible labels. Wrapping onto a second row
+      costs the page 40px of height and moves it while the window is dragged.
+    */
+    .${NS}-bar { container-type: inline-size; }
+    @container (max-width: 600px) {
+      .${NS}-modes .${NS}-label { display: none; }
+      .${NS}-modes button { padding: 0 10px; }
+      .${NS}-bar .${NS}-hint { display: none; }
+    }
+    .${NS}-modes button:hover { background: rgba(255,255,255,.06); color: var(--ayna-text, #f4f2ef); filter: none; }
+    .${NS}-modes button.${NS}-on {
+      background: rgba(255,255,255,.12); color: var(--ayna-text, #f4f2ef);
+      box-shadow: 0 1px 2px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .${NS}-modes button.${NS}-on svg { color: var(--ayna-accent, #de9446); }
+    /* A count on a button is a chip, not a "· 2" tacked onto its label. */
+    .${NS}-chip {
+      display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+      min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+      background: rgba(255,255,255,.12); color: var(--ayna-text, #f4f2ef); font: 600 11px/1 -apple-system, system-ui, sans-serif;
+    }
+    /* What is left to judge is the one thing to read in review, so it gets the colour. */
+    .${NS}-progress {
+      font-weight: 600; color: var(--ayna-you, #e8b478); white-space: nowrap;
+      padding: 4px 12px; border-radius: 999px;
+      background: color-mix(in srgb, var(--ayna-you, #e8b478) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ayna-you, #e8b478) 28%, transparent);
+    }
+    .${NS}-progress:empty { display: none; }
+    .${NS}-progress.${NS}-done {
+      color: var(--ayna-good, #7bc47f);
+      background: color-mix(in srgb, var(--ayna-good, #7bc47f) 10%, transparent);
+      border-color: color-mix(in srgb, var(--ayna-good, #7bc47f) 30%, transparent);
+    }
     .${NS}-warn { color: var(--ayna-warn, #e0a458); }
     .${NS}-tag {
       position: absolute; z-index: 2147483641; pointer-events: none;
@@ -602,10 +666,22 @@
       position: absolute; pointer-events: none; z-index: 2147483639;
       border: 2px dashed var(--ayna-warn, #e0a458); background: rgba(222,148,70,.12); border-radius: 3px;
     }
-    .${NS}-bar button:disabled { opacity: .4; cursor: not-allowed; }
-    .${NS}-bar button.${NS}-ghost {
-      background: transparent; color: var(--ayna-text, #f4f2ef); border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+    /*
+      Disabled is neutral, not a faded accent. Dimming the orange to 40% left a
+      brown slab with brown text — unreadable, and still shaped like the main
+      action. Now it is plainly a button that is not ready yet, and says so.
+    */
+    .${NS}-bar button:disabled {
+      background: rgba(255,255,255,.05); color: var(--ayna-dim, rgba(255,255,255,.46));
+      border-color: var(--ayna-line, rgba(255,255,255,.075)); cursor: not-allowed; filter: none;
     }
+    .${NS}-bar button.${NS}-ghost {
+      background: transparent; color: var(--ayna-text, #f4f2ef); border-color: rgba(255,255,255,.14);
+    }
+    .${NS}-bar button.${NS}-ghost:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.24); filter: none; }
+    /* Ending things is always available and never the loudest thing on the bar. */
+    .${NS}-bar button.${NS}-quiet { background: transparent; color: var(--ayna-muted, rgba(255,255,255,.62)); }
+    .${NS}-bar button.${NS}-quiet:hover { background: rgba(255,255,255,.06); color: var(--ayna-text, #f4f2ef); filter: none; }
     .${NS}-spin {
       width: 13px; height: 13px; border-radius: 50%; display: inline-block;
       border: 2px solid var(--ayna-line, rgba(255,255,255,.075)); border-top-color: var(--ayna-you, #e8b478);
@@ -674,7 +750,9 @@
       border-radius: 6px; border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
     }
     .${NS}-row {
-      display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;
+      /* Centred, so "Esc to cancel" reads on the buttons' line rather than
+         hanging from the top of a box stretched to their height. */
+      display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 10px;
       flex: none;  /* pinned: the action row is never scrolled away */
     }
     .${NS}-row button {
@@ -939,6 +1017,16 @@
           : 'Browsing — click links freely, nothing is captured',
       };
       const NEXT_LABEL = { comment: 'Move mode', move: 'Browse mode', browse: 'Comment mode' };
+      // A glyph per mode, drawn in the label's ink, so the four read at a glance.
+      const svg = (d) =>
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+      const ICON = {
+        comment: svg('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/>'),
+        draw: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+        move: svg('<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>'),
+        browse: svg('<path d="M4 4l7 17 2.5-7.5L21 11Z"/>'),
+      };
 
       /*
         Three groups, not one huddle in the middle.
@@ -961,7 +1049,8 @@
           MODES.map((m) =>
             '<button data-act="setmode" data-mode="' + m.id + '"' +
             (state.mode === m.id ? ' aria-pressed="true" class="' + NS + '-on"' : ' aria-pressed="false"') +
-            ' title="' + m.title + '">' + m.label + '</button>',
+            ' title="' + m.title + '" aria-label="' + m.label + '">' + ICON[m.id] +
+            '<span class="' + NS + '-label">' + m.label + '</span></button>',
           ).join('') +
         '</div>' +
         '<div class="' + NS + '-barside ' + NS + '-baractions">' +
@@ -1001,10 +1090,20 @@
         listening. When nothing was, the user sat watching a spinner that meant
         nothing. Say only what is true — sent — and speak up if it goes unanswered.
       */
+      /*
+        The same three places as the other phases, so nothing jumps to the
+        middle and back. "Changes are in" is an outline: it is the way out when
+        the window cannot see the edits land, not the thing to press next.
+      */
       bar.innerHTML =
-        '<span class="' + NS + '-spin" aria-hidden="true"></span>' +
-        '<span class="' + NS + '-waiting">Sent — waiting for Claude to pick this up…</span>' +
-        '<button data-act="applied" title="Reload and show the result now">Changes are in</button>';
+        '<div class="' + NS + '-barside">' +
+          '<span class="' + NS + '-brand">ayna</span>' +
+          '<span class="' + NS + '-spin" aria-hidden="true"></span>' +
+          '<span class="' + NS + '-waiting ' + NS + '-hint">Sent — waiting for Claude to pick this up…</span>' +
+        '</div>' +
+        '<div class="' + NS + '-barside ' + NS + '-baractions">' +
+          '<button data-act="applied" class="' + NS + '-ghost" title="Reload and show the result now">Changes are in</button>' +
+        '</div>';
 
       /*
         A way out that does not need anything else to be running.
@@ -1053,7 +1152,7 @@
         'title="Go back to commenting without ending the review">Comment more</button>' +
         '<button data-act="approve-all" class="' + NS + '-ghost" ' +
         'title="Marks every pending change approved">Approve all</button>' +
-        '<button data-act="close" class="' + NS + '-ghost" ' +
+        '<button data-act="close" class="' + NS + '-quiet" ' +
         'title="Ends the review — anything unjudged stays pending">Close</button>' +
       '</div>';
 
@@ -4119,7 +4218,14 @@
     if (!el) return;
     const tasks = await window.__aynaList().catch(() => []);
     const pending = tasks.filter((t) => t.status !== 'approved').length;
-    el.textContent = 'Tasks' + (pending ? ' · ' + pending : '');
+    el.textContent = 'Tasks';
+    if (pending) {
+      const chip = document.createElement('span');
+      chip.className = NS + '-chip';
+      chip.textContent = String(pending);
+      el.appendChild(chip);
+    }
+    el.setAttribute('aria-label', pending ? `Tasks, ${pending} pending` : 'Tasks');
   }
 
   /*
