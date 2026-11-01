@@ -384,7 +384,7 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
           await page.waitForSelector('.ayna-ov-pop textarea', { timeout: 10000 });
           await page.waitForTimeout(350);
 
-          rows = await page.evaluate(() => {
+          const measure = (selector) => page.evaluate((sel) => {
             const lum = (c) => {
               const m = /rgba?\(([^)]+)\)/.exec(c);
               if (!m) return null;
@@ -441,7 +441,7 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
               return null; // never reached an opaque layer: not measurable
             };
             const out = [];
-            for (const el of document.querySelectorAll('[data-ayna] button, [data-ayna] textarea, [data-ayna] .ayna-ov-hint, [data-ayna] .ayna-ov-sel')) {
+            for (const el of document.querySelectorAll(sel)) {
               const r = el.getBoundingClientRect();
               if (r.width < 2 || r.height < 2) continue;
               const cs = getComputedStyle(el);
@@ -465,7 +465,10 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
               });
             }
             return out;
-          });
+          }, selector);
+          rows = await measure(
+            '[data-ayna] button, [data-ayna] textarea, [data-ayna] .ayna-ov-hint, [data-ayna] .ayna-ov-sel, [data-ayna] .ayna-ov-attach',
+          );
 
           // Two layout faults that only show with the box open and a real pointer.
           layout = await page.evaluate(() => {
@@ -490,6 +493,12 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
               dead,
             };
           });
+
+          // The task list, which once kept its own dark-only colours.
+          await page.keyboard.press('Escape');
+          await page.click('[data-act=tasks]');
+          await page.waitForSelector('.ayna-ov-panel', { timeout: 5000 });
+          rows.push(...(await measure('.ayna-ov-panel-head, .ayna-ov-task-text')));
           await page.close();
         },
       });
@@ -511,6 +520,26 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
         failed.map((f) => `  ${f.what} "${f.text}" ${f.ratio}:1 needs ${f.needs}`).join('\n'),
     );
   };
+
+  /*
+    A light theme, set the way a project would set one: surfaces and ink only.
+    The lane colours are left at their defaults on purpose — pastels tuned for a
+    dark rail — so the test also proves they are made readable, not trusted.
+  */
+  const LIGHT_THEME = {
+    ...DEFAULT_THEME,
+    surface: '#ffffff', bar: '#f7f7f8', panel: '#ffffff',
+    line: 'rgba(0,0,0,0.08)', 'panel-line': 'rgba(0,0,0,0.10)',
+    text: '#16181d', 'panel-text': '#16181d',
+    muted: 'rgba(0,0,0,0.62)', dim: 'rgba(0,0,0,0.50)',
+  };
+
+  test('every control, and the task list, is readable in a light theme', async () => {
+    const { rows } = await measureControls(LIGHT_THEME);
+    assertReadable(rows);
+    assert.ok(rows.some((r) => /^Tasks/.test(r.text)), 'the task list was measured');
+    assert.ok(rows.some((r) => r.text === 'attach an image'), 'the accent-coloured link was measured');
+  });
 
   // No `theme`: the fallbacks, which is what every test and probe renders.
   test('every control in the comment box and the bar is readable with no theme', async () => {

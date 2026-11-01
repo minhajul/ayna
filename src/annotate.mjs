@@ -1216,6 +1216,52 @@ export async function runAnnotate({
         */
         const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
         const INK_DARK = luminance('#0a0a0a');
+
+        /*
+          A light surface, and what has to follow it.
+
+          The defaults were tuned for a near-black rail, so a white one turned
+          the lane colours — the names that sign each line, the green of a
+          clean check — into pastels at under 2:1, and the accent, used for
+          labels as well as for the one call to action, into orange text at
+          2.4:1. Any of them that cannot be read on the surface is walked
+          toward the text colour until it can; one that already reads is left
+          exactly as given. The accent keeps its own value for fills and gets
+          a separate one for text. And a recessed well — the message box, a
+          diff — is a shade below the surface, which over white is a whisper
+          rather than the .32 black it is over the dark rail.
+        */
+        const rgb = (hex) => {
+          const m = /^#?([0-9a-f]{6})$/i.exec(String(hex ?? '').trim());
+          return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null;
+        };
+        const hexOf = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+        const ground = luminance(t.surface);
+        const towards = rgb(t.text) ?? (ground !== null && ground > 0.5 ? [10, 10, 10] : [244, 242, 239]);
+        const readable = (hex) => {
+          const from = rgb(hex);
+          if (!from || ground === null) return hex;
+          for (let k = 0; k <= 1.0001; k += 0.05) {
+            const mixed = hexOf(from.map((v, i) => v + (towards[i] - v) * k));
+            if (ratio(luminance(mixed), ground) >= 4.5) return k === 0 ? hex : mixed;
+          }
+          return hexOf(towards);
+        };
+        for (const key of ['you', 'agent', 'ayna', 'good', 'warn', 'bad', 'live']) {
+          if (typeof t[key] !== 'string') continue;
+          const fixed = readable(t[key]);
+          if (fixed !== t[key]) {
+            t = { ...t, [key]: fixed };
+            document.documentElement.style.setProperty('--ayna-' + key, fixed);
+          }
+        }
+        if (typeof t.accent === 'string') {
+          document.documentElement.style.setProperty('--ayna-accent-text', readable(t.accent));
+        }
+        if (ground !== null) {
+          document.documentElement.style.setProperty('--ayna-well', ground > 0.5 ? 'rgba(0,0,0,.045)' : 'rgba(0,0,0,.32)');
+        }
+
         for (const key of ['accent', 'good', 'bad', 'warn', 'live']) {
           const l = luminance(t[key]);
           if (l === null) continue;

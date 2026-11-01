@@ -168,7 +168,7 @@
     */
     .${NS}-modes {
       display: flex; gap: 0; padding: 0; border-radius: 10px; overflow: hidden;
-      background: rgba(255,255,255,.04); border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 4%, transparent); border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
     }
 
     /* The crop leads the box: on a canvas it is the entire comment. */
@@ -294,7 +294,7 @@
     .${NS}-bar[data-activity=waiting] .${NS}-activity-dot {
       display: block; background: var(--ayna-live, #e0b978); animation: ${NS}-breathe 2.4s ease-in-out infinite;
     }
-    .${NS}-bar[data-drawer=open] [data-act=activity] { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.24); }
+    .${NS}-bar[data-drawer=open] [data-act=activity] { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 10%, transparent); border-color: color-mix(in srgb, var(--ayna-text, #f4f2ef) 24%, transparent); }
     .${NS}-scrim { display: none; }
     /* Above the review markers, which otherwise show through it at full strength. */
     .${NS}-scrim { position: fixed; inset: 0; z-index: 2147483647; background: rgba(0,0,0,.45); }
@@ -394,7 +394,7 @@
       gap: 6px 10px; align-items: baseline;
     }
     .${NS}-empty dt {
-      color: var(--ayna-accent, #de9446);
+      color: var(--ayna-accent-text, var(--ayna-accent, #de9446));
       font: 600 12px/1.45 -apple-system, system-ui, sans-serif;
     }
     .${NS}-empty dd {
@@ -467,7 +467,7 @@
     /* Their words, set apart the way a quoted message is — not recoloured. */
     .${NS}-line[data-kind=you] > span {
       margin-top: 4px; padding: 7px 10px; border-radius: 8px;
-      background: rgba(255,255,255,.045);
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 4.5%, transparent);
       border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
     }
     /* The same speaker again is a new paragraph, not a new header. */
@@ -511,7 +511,7 @@
     .${NS}-round {
       margin: 0 0 12px; border-radius: 10px;
       border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
-      background: rgba(255,255,255,.025);
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 2.5%, transparent);
     }
     .${NS}-round-head {
       display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-height: var(--ayna-row-tap, 0);
@@ -520,7 +520,7 @@
     }
     .${NS}-round-head .${NS}-at { font-weight: 400; }
     .${NS}-round-head { cursor: pointer; user-select: none; border-radius: 10px 10px 0 0; }
-    .${NS}-round-head:hover { background: rgba(255,255,255,.03); }
+    .${NS}-round-head:hover { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 3%, transparent); }
     .${NS}-round-head:focus-visible { outline: 2px solid var(--ayna-accent, #de9446); outline-offset: -2px; }
     .${NS}-chev {
       flex: none; width: 6px; height: 6px; margin: 0 2px 3px 1px;
@@ -599,7 +599,7 @@
     .${NS}-file ins { text-decoration: none; color: var(--ayna-good, #7bc47f); margin-left: 6px; }
     .${NS}-file del { text-decoration: none; color: var(--ayna-bad, #e0685f); margin-left: 6px; }
     .${NS}-diff {
-      margin: 2px 0 6px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,.35);
+      margin: 2px 0 6px; padding: 6px 8px; border-radius: 6px; background: var(--ayna-well, rgba(0,0,0,.32));
       font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
       white-space: pre-wrap; word-break: break-all; color: var(--ayna-muted, rgba(255,255,255,.62));
     }
@@ -645,12 +645,12 @@
     }
     .${NS}-preview-bar button {
       border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer;
-      font: inherit; background: rgba(255,255,255,.08); color: var(--ayna-text, #f4f2ef);
+      font: inherit; background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 8%, transparent); color: var(--ayna-text, #f4f2ef);
     }
     .${NS}-preview-bar button[data-act=prev],
     .${NS}-preview-bar button[data-act=next] { padding: 6px 10px; }
     .${NS}-preview-bar .${NS}-ok { background: var(--ayna-good, #7bc47f); color: var(--ayna-on-good, #0a0a0a); }
-    .${NS}-preview-bar .${NS}-no { background: rgba(255,255,255,.08); color: var(--ayna-text, #f4f2ef); }
+    .${NS}-preview-bar .${NS}-no { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 8%, transparent); color: var(--ayna-text, #f4f2ef); }
     /*
       One box, the send inside it.
 
@@ -661,7 +661,7 @@
     .${NS}-console-say { flex: none; padding: 10px 14px 12px; border-top: 1px solid var(--ayna-line, rgba(255,255,255,.075)); }
     .${NS}-say-box {
       display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px;
-      background: rgba(0,0,0,.32); border-radius: 10px;
+      background: var(--ayna-well, rgba(0,0,0,.32)); border-radius: 10px;
       border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
     }
     .${NS}-say-box:focus-within { border-color: var(--ayna-you, #e8b478); }
@@ -677,7 +677,7 @@
       font: 600 15px/1 -apple-system, system-ui, sans-serif;
     }
     .${NS}-console-say input:placeholder-shown + button {
-      background: rgba(255,255,255,.08); color: var(--ayna-dim, rgba(255,255,255,.46)); cursor: default;
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 8%, transparent); color: var(--ayna-dim, rgba(255,255,255,.46)); cursor: default;
     }
     .${NS}-console.${NS}-min .${NS}-console-lines,
     .${NS}-console.${NS}-min .${NS}-console-say { display: none; }
@@ -760,18 +760,18 @@
       .${NS}-bar button { padding: 0 10px; }
     }
     .${NS}-modes button:hover { background: transparent; color: var(--ayna-text, #f4f2ef); filter: none; }
-    .${NS}-modes button:hover::before { background: rgba(255,255,255,.06); }
+    .${NS}-modes button:hover::before { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 6%, transparent); }
     .${NS}-modes button.${NS}-on { color: var(--ayna-text, #f4f2ef); }
     .${NS}-modes button.${NS}-on::before {
-      background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.10), 0 1px 2px rgba(0,0,0,.45);
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ayna-text, #f4f2ef) 10%, transparent), 0 1px 2px rgba(0,0,0,.45);
     }
     .${NS}-modes button:focus-visible { outline-offset: -2px; }
-    .${NS}-modes button.${NS}-on svg { color: var(--ayna-accent, #de9446); }
+    .${NS}-modes button.${NS}-on svg { color: var(--ayna-accent-text, var(--ayna-accent, #de9446)); }
     /* A count on a button is a chip, not a "· 2" tacked onto its label. */
     .${NS}-chip {
       display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
       min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-      background: rgba(255,255,255,.12); color: var(--ayna-text, #f4f2ef); font: 600 11px/1 -apple-system, system-ui, sans-serif;
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 12%, transparent); color: var(--ayna-text, #f4f2ef); font: 600 11px/1 -apple-system, system-ui, sans-serif;
     }
     /* What is left to judge is the one thing to read in review, so it gets the colour. */
     .${NS}-progress {
@@ -823,16 +823,16 @@
       action. Now it is plainly a button that is not ready yet, and says so.
     */
     .${NS}-bar button:disabled {
-      background: rgba(255,255,255,.05); color: var(--ayna-dim, rgba(255,255,255,.46));
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 5%, transparent); color: var(--ayna-dim, rgba(255,255,255,.46));
       border-color: var(--ayna-line, rgba(255,255,255,.075)); cursor: not-allowed; filter: none;
     }
     .${NS}-bar button.${NS}-ghost {
-      background: transparent; color: var(--ayna-text, #f4f2ef); border-color: rgba(255,255,255,.14);
+      background: transparent; color: var(--ayna-text, #f4f2ef); border-color: color-mix(in srgb, var(--ayna-text, #f4f2ef) 14%, transparent);
     }
-    .${NS}-bar button.${NS}-ghost:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.24); filter: none; }
+    .${NS}-bar button.${NS}-ghost:hover { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 6%, transparent); border-color: color-mix(in srgb, var(--ayna-text, #f4f2ef) 24%, transparent); filter: none; }
     /* Ending things is always available and never the loudest thing on the bar. */
     .${NS}-bar button.${NS}-quiet { background: transparent; color: var(--ayna-muted, rgba(255,255,255,.62)); }
-    .${NS}-bar button.${NS}-quiet:hover { background: rgba(255,255,255,.06); color: var(--ayna-text, #f4f2ef); filter: none; }
+    .${NS}-bar button.${NS}-quiet:hover { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 6%, transparent); color: var(--ayna-text, #f4f2ef); filter: none; }
     .${NS}-spin {
       width: 13px; height: 13px; border-radius: 50%; display: inline-block;
       border: 2px solid var(--ayna-line, rgba(255,255,255,.075)); border-top-color: var(--ayna-you, #e8b478);
@@ -887,7 +887,7 @@
       background: rgba(222,148,70,.12);
     }
     .${NS}-act[data-busy] { opacity: .55; pointer-events: none; }
-    .${NS}-attach { color: var(--ayna-accent, #de9446); text-decoration: underline; cursor: pointer; }
+    .${NS}-attach { color: var(--ayna-accent-text, var(--ayna-accent, #de9446)); text-decoration: underline; cursor: pointer; }
     .${NS}-pop.${NS}-dragover { outline: 2px dashed var(--ayna-accent, #de9446); outline-offset: 3px; }
     .${NS}-thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
     .${NS}-auto { position: relative; display: inline-flex; }
@@ -974,22 +974,23 @@
       depending on where you happened to click.
     */
     .${NS}-ok { background: var(--ayna-good, #7bc47f); color: var(--ayna-on-good, #0a0a0a); }
-    .${NS}-no { background: rgba(255,255,255,.08); color: var(--ayna-text, #f4f2ef); }
+    .${NS}-no { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 8%, transparent); color: var(--ayna-text, #f4f2ef); }
     .${NS}-ok:hover { background: #166534; }
     .${NS}-no:hover { background: var(--ayna-bad, #e0685f); color: var(--ayna-on-bad, #0a0a0a); }
     .${NS}-panel {
       position: fixed; z-index: 2147483646; right: 16px; width: 340px;
       max-width: calc(100vw - 32px);
-      background: var(--ayna-bar, #0d0d0f); color: #e8eaf0; border: 1px solid #2a3140; border-radius: 14px;
+      background: var(--ayna-panel, var(--ayna-bar, #0d0d0f)); color: var(--ayna-panel-text, #e8eaf0);
+      border: 1px solid var(--ayna-panel-line, #2a3140); border-radius: 14px;
       box-shadow: 0 3px 8px rgba(0,0,0,.30); display: flex; flex-direction: column;
       font: 13px/1.5 -apple-system, system-ui, sans-serif; overflow: hidden;
     }
     .${NS}-panel-head {
       display: flex; align-items: center; gap: 8px; padding: 12px 14px; flex: none;
-      border-bottom: 1px solid #2a3140; font-weight: 600;
+      border-bottom: 1px solid var(--ayna-panel-line, #2a3140); font-weight: 600;
     }
     .${NS}-panel-head button {
-      margin-left: auto; background: transparent; border: 0; color: #8b93a7;
+      margin-left: auto; background: transparent; border: 0; color: var(--ayna-muted, #8b93a7);
       font: inherit; cursor: pointer; padding: 2px 6px;
     }
     .${NS}-panel-list { overflow: auto; min-height: 0; }
@@ -998,10 +999,10 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .${NS}-task {
-      padding: 9px 14px; border-top: 1px solid #1d2330; cursor: pointer;
+      padding: 9px 14px; border-top: 1px solid var(--ayna-line, #1d2330); cursor: pointer;
       display: flex; gap: 9px; align-items: flex-start;
     }
-    .${NS}-task:hover { background: #171b22; }
+    .${NS}-task:hover { background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 5%, transparent); }
     .${NS}-dot {
       width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--ayna-accent, #de9446);
     }
@@ -1015,7 +1016,7 @@
     .${NS}-task-acts { display: flex; gap: 4px; flex: none; }
     .${NS}-task-acts button {
       border: 0; border-radius: 6px; padding: 2px 7px; font: 600 11px/1.6 inherit; cursor: pointer;
-      background: #232a36; color: var(--ayna-text, #f4f2ef);
+      background: color-mix(in srgb, var(--ayna-text, #f4f2ef) 10%, transparent); color: var(--ayna-text, #f4f2ef);
     }
     .${NS}-task-acts button:hover { background: var(--ayna-good, #7bc47f); color: var(--ayna-on-good, #0a0a0a); }
     .${NS}-task-acts button.${NS}-no:hover { background: var(--ayna-bad, #e0685f); }
