@@ -21,6 +21,9 @@
   */
   // A window with its side column: the rail. One mark for it everywhere — the
   // bar's Activity button on a narrow window, the rail's own fold on a wide one.
+  // The name as people read it, in the bar and on the lines ayna signs. The
+  // lane, the classes and the command stay lowercase; this is only what shows.
+  const AYNA = 'Ayna';
   // The folded rail's width; the page is inset by the same amount.
   const SPINE = '48px';
   const RAIL_ICON =
@@ -30,7 +33,7 @@
     '<button data-act="activity" class="' + NS + '-ghost" aria-label="Activity" aria-expanded="' +
     String(drawerOpen) + '">' + RAIL_ICON +
     '<span class="' + NS + '-activity-dot"></span></button>' +
-    '<span class="' + NS + '-brand">ayna</span>';
+    '<span class="' + NS + '-brand">' + AYNA + '</span>';
   // The Tasks button's face: an icon that stays, and a word that gives way when
   // the bar is short of room.
   const TASKS_FACE =
@@ -141,7 +144,7 @@
     .${NS}-brand {
       display: inline-flex; align-items: center; gap: 8px; flex: none;
       padding-right: 12px; border-right: 1px solid var(--ayna-line, rgba(255,255,255,.075));
-      font-weight: 700; letter-spacing: .01em; text-transform: lowercase; color: var(--ayna-text, #f4f2ef);
+      font-weight: 700; letter-spacing: .01em; color: var(--ayna-text, #f4f2ef);
     }
     .${NS}-brand::before {
       content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--ayna-accent, #de9446);
@@ -3503,7 +3506,7 @@
     } else {
       row.dataset.step = '';
       if (tone) row.dataset.tone = tone;
-      row.title = t.textContent + ' · ' + lane;
+      row.title = t.textContent + ' · ' + ({ you: 'You', claude: 'Claude', ayna: AYNA }[lane] ?? lane);
       b.textContent = glyph ?? '·';
     }
 
@@ -3849,7 +3852,7 @@
         // Claude's own suggestions, or a check's (the taste review files these).
         const ours = e.source && e.source !== 'claude';
         const row = item({
-          who: ours ? 'ayna' : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
+          who: ours ? AYNA : 'Claude', lane: ours ? 'ayna' : 'claude', text: e.comment ?? '', at: e.at,
           detail: 'a suggestion · waiting for your word',
         });
         // Not the round's, so not in its card, where it would fold away unseen.
@@ -3867,7 +3870,7 @@
         // Signed by whoever wrote it. A note with no source is the user's own —
         // from another window, the CLI or an import — not the checker's.
         const [who, lane] =
-          e.source === 'claude' ? ['Claude', 'claude'] : e.source && e.source !== 'user' ? ['ayna', 'ayna'] : ['You', 'you'];
+          e.source === 'claude' ? ['Claude', 'claude'] : e.source && e.source !== 'user' ? [AYNA, 'ayna'] : ['You', 'you'];
         const row = item({ who, lane, text: e.comment ?? '', at: e.at, detail: 'filed outside this window · in Tasks' });
         lines.appendChild(row);
         return true;
@@ -3889,8 +3892,8 @@
         approved: { who: 'You', lane: 'you', text: 'Approved', tone: 'good' },
         in_progress: { who: 'Claude', lane: 'claude', text: 'Working on it' },
         applied: { who: 'Claude', lane: 'claude', text: 'Done' },
-        needs_confirmation: { who: 'ayna', lane: 'ayna', text: 'Needs your confirmation', tone: 'warn' },
-        obsolete: { who: 'ayna', lane: 'ayna', text: 'No longer needed' },
+        needs_confirmation: { who: AYNA, lane: 'ayna', text: 'Needs your confirmation', tone: 'warn' },
+        obsolete: { who: AYNA, lane: 'ayna', text: 'No longer needed' },
       }[e.status];
       // "rejected" is drawn from its own event, which carries the note; "open"
       // again is bookkeeping for a retry, not something anyone did.
@@ -3944,7 +3947,7 @@
     if (e.event === 'gate') {
       const card = roundCard(e.round);
       if (!card) return false;
-      addToCard(card, item({ who: 'ayna', lane: 'ayna', at: e.at, ...gateWords(e) }));
+      addToCard(card, item({ who: AYNA, lane: 'ayna', at: e.at, ...gateWords(e) }));
       // Offered once the round has finished landing — the check is the last
       // step of that — so an undo never races the reload that shows the change.
       if (card.files?.length && card.state !== 'undone' && !card.el.querySelector('.' + NS + '-round-acts')) {

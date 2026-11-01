@@ -628,6 +628,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
 
   test('a round is one card that says whose move it is', async () => {
     const seen = [];
+    let brand = null;
     await withConsole(async (page, dir) => {
       const card = () =>
         page.evaluate(() => {
@@ -642,6 +643,8 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
           };
         });
 
+      // innerText, not textContent: it is the name as drawn, after any CSS case change.
+      brand = await page.evaluate(() => document.querySelector('.ayna-ov-brand').innerText);
       await page.click('.t');
       await page.waitForSelector('.ayna-ov-pop textarea');
       await page.fill('.ayna-ov-pop textarea', 'make it bigger');
@@ -664,6 +667,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     });
 
     const [drafting, sent, landed, judged] = seen;
+    assert.equal(brand, 'Ayna', 'the bar shows the name capitalised');
     // The note sits under its round from the start, not above a header drawn later.
     assert.deepEqual(drafting, { title: 'Next round', pill: 'Not sent yet', lines: ['You: make it bigger'], cards: 1 });
     assert.equal(sent.title, 'Round 1');
@@ -671,7 +675,7 @@ describe('the console in the window', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER 
     assert.equal(sent.cards, 1, 'sending turns the draft into the round, it does not add a second card');
     assert.equal(landed.pill, 'Your turn');
     assert.ok(landed.lines.includes('Claude: Finished'), landed.lines.join(' | '));
-    assert.ok(landed.lines.some((l) => l.startsWith('ayna: ')), 'the check is signed by ayna, not by Claude');
+    assert.ok(landed.lines.some((l) => l.startsWith('Ayna: ')), 'the check is signed by Ayna, not by Claude');
     assert.equal(judged.pill, 'Approved');
     assert.equal(judged.lines.at(-1), 'You: Approved');
     // Nothing speaks in ids or code names.
