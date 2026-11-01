@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { gotoSettled, reloadSettled } from './browser.mjs';
+import { snapshotProject, roundChanges, hunks } from './rounds.mjs';
 
 /**
  * Point-and-comment review on the live page.
@@ -532,6 +533,11 @@ export async function runAnnotate({
   };
 
   let editedAt = 0;
+  // Every file the watcher saw move this round, and the project as it was
+  // before, so the round can say what it changed. See rounds.mjs.
+  const roundEdits = new Set();
+  let roundSnapshot = null;
+  const roundFiles = new Map();
   let projectWatcher = null;
   const watchProject = () => {
     if (projectWatcher || !projectDir) return;
@@ -544,6 +550,7 @@ export async function runAnnotate({
         if (parts.some((part) => part === '.ayna' || SKIP_DIRS.includes(part))) return;
         if (!TEXT_EXT.has(path.extname(rel).toLowerCase())) return;
         editedAt = Date.now();
+        roundEdits.add(rel);
       });
     } catch {
       // No recursive watch on this platform — the marker path still works.
@@ -625,6 +632,11 @@ export async function runAnnotate({
     } catch {
       // Uncompared is still honest; the gate reports totals as it always has.
     }
+    // Read before anyone edits, and before Claude hears there is anything to do.
+    roundEdits.clear();
+    roundSnapshot = projectDir
+      ? await snapshotProject(projectDir, { skipDirs: SKIP_DIRS, textExt: TEXT_EXT }).catch(() => null)
+      : null;
     watchProject();
     await writeManifest();
     await writeStatus();
@@ -691,6 +703,12 @@ export async function runAnnotate({
     } catch {
       return null;
     }
+  });
+
+  // One file's diff from one round, as lines for the panel. See rounds.mjs.
+  await page.exposeFunction('__aynaDiff', async (forRound, file) => {
+    const change = roundFiles.get(Number(forRound))?.find((c) => c.file === file);
+    return change?.ops ? hunks(change.ops) : null;
   });
 
   /*
@@ -1134,7 +1152,23 @@ export async function runAnnotate({
         appearance && signature && appearance.rules === signature.rules
           ? false
           : Boolean(appearance && signature);
-      emit({ event: 'applied', round, via: reason, reloaded: !changedItself });
+
+      /*
+        Which files the round changed, with the counts, so the person judging it
+        can see what was done instead of taking "landed" on trust. The diffs are
+        kept here for the panel to ask for; the event carries only the list.
+      */
+      const changes = roundSnapshot ? await roundChanges(roundSnapshot, roundEdits).catch(() => []) : [];
+      roundFiles.set(round, changes);
+      roundSnapshot = null;
+      roundEdits.clear();
+      emit({
+        event: 'applied',
+        round,
+        via: reason,
+        reloaded: !changedItself,
+        files: changes.map(({ file, status, added, removed }) => ({ file, status, added, removed })),
+      });
 
       // Anything the user sent back for another attempt has now had one, so it
       // returns to the pile to be judged again rather than staying "rejected".

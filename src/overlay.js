@@ -431,6 +431,25 @@
       border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
     }
     .${NS}-round-body > .${NS}-line:first-child { border-top: 0; margin-top: 0; }
+    .${NS}-files { grid-area: extra; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+    .${NS}-file {
+      display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+      background: transparent; border: 0; border-radius: 5px; padding: 3px 6px; margin: 0 -6px;
+      color: var(--ayna-text, #f4f2ef); font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .${NS}-file:hover { background: var(--ayna-line, rgba(255,255,255,.075)); }
+    .${NS}-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .${NS}-file em { flex: none; font-style: normal; color: var(--ayna-dim, rgba(255,255,255,.46)); }
+    .${NS}-file ins { text-decoration: none; color: var(--ayna-good, #7bc47f); margin-left: 6px; }
+    .${NS}-file del { text-decoration: none; color: var(--ayna-bad, #e0685f); margin-left: 6px; }
+    .${NS}-diff {
+      margin: 2px 0 6px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,.35);
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap; word-break: break-all; color: var(--ayna-muted, rgba(255,255,255,.62));
+    }
+    .${NS}-diff [data-t="+"] { color: var(--ayna-good, #7bc47f); }
+    .${NS}-diff [data-t="-"] { color: var(--ayna-bad, #e0685f); }
+    .${NS}-diff [data-t="…"] { color: var(--ayna-dim, rgba(255,255,255,.46)); }
     /*
       Neon, in the sense that matters: saturated ink on near-black.
 
@@ -3319,6 +3338,51 @@
     return { text: 'No new faults', detail: context, tone: 'good' };
   }
 
+  /*
+    The files a round changed, each one opening to its diff.
+
+    Two path segments, not one: a Next app has a dozen page.tsx files, and the
+    name alone says nothing about which. The diff is fetched when asked for,
+    because most rounds are judged by looking at the page, not the source.
+  */
+  function fileList(round, files) {
+    const list = document.createElement('div');
+    list.className = NS + '-files';
+    for (const f of files) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = NS + '-file';
+      row.dataset.status = f.status;
+      row.title = f.file;
+      const name = document.createElement('span');
+      name.textContent = f.file.split('/').slice(-2).join('/');
+      const count = document.createElement('em');
+      if (f.added) count.appendChild(document.createElement('ins')).textContent = '+' + f.added;
+      if (f.removed) count.appendChild(document.createElement('del')).textContent = '−' + f.removed;
+      if (!f.added && !f.removed && f.status !== 'modified') count.textContent = f.status;
+      row.append(name, count);
+      row.addEventListener('click', async () => {
+        const open = row.nextElementSibling?.classList.contains(NS + '-diff');
+        if (open) {
+          row.nextElementSibling.remove();
+          return;
+        }
+        const lines = await window.__aynaDiff?.(round, f.file).catch(() => null);
+        const pre = document.createElement('div');
+        pre.className = NS + '-diff';
+        for (const l of lines ?? [{ t: '…', s: 'no diff to show' }]) {
+          const line = document.createElement('div');
+          line.dataset.t = l.t;
+          line.textContent = (l.t === '…' ? '' : l.t + ' ') + (l.t === '…' ? l.s || '…' : l.s);
+          pre.appendChild(line);
+        }
+        row.after(pre);
+      });
+      list.appendChild(row);
+    }
+    return list;
+  }
+
   const roundCard = (round) => [...cards].reverse().find((c) => c.round === round) ?? cards.at(-1) ?? null;
 
   /** Draw one event. Returns false for anything the rail does not show. */
@@ -3383,7 +3447,12 @@
       const card = roundCard(e.round);
       if (!card) return false;
       const how = { user: 'you said the changes are in', 'file-change': 'noticed from the edits' }[e.via] ?? '';
-      addToCard(card, item({ who: 'Claude', lane: 'claude', text: 'Finished', detail: how, at: e.at }));
+      const files = e.files ?? [];
+      const row = addToCard(card, item({
+        who: 'Claude', lane: 'claude', at: e.at, detail: how,
+        text: files.length ? 'Finished · ' + plural(files.length, 'file') : 'Finished',
+      }));
+      if (files.length) row.appendChild(fileList(e.round, files));
       setCard(card, 'ready');
       return true;
     }
