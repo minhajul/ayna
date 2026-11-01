@@ -107,9 +107,11 @@ describe('cropping the page the user is looking at', { skip: !hasBrowser && 'AYN
   test('a crop hides the marks over the element, not the bar or the rail beside it', async () => {
     const chrome = await context.newPage();
     try {
-      await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:200px"><body style="margin:0">
+      // Written the way the overlay writes it: the rail's width is a clamp() of
+      // the window, which a custom property hands back unresolved.
+      await chrome.setContent(`<html style="--ayna-inset-top:50px;--ayna-inset-left:var(--ayna-rail-inset, clamp(150px, 25vw, 400px))"><body style="margin:0">
         <div class="ayna-ov-bar" data-ayna="1" style="position:fixed;top:0;left:200px;right:0;height:50px;background:#000"></div>
-        <div class="ayna-ov-console" data-ayna="1" style="position:fixed;top:0;bottom:0;left:0;width:200px;background:#000"></div>
+        <div class="ayna-ov-console" data-ayna="1" style="position:fixed;top:0;bottom:0;left:0;width:clamp(150px, 25vw, 400px);background:#000"></div>
         <div id="nav" style="position:absolute;top:52px;left:204px;width:300px;height:40px;background:rgb(255,0,0)"></div>
         <div class="ayna-ov-hl" data-ayna="1" style="position:fixed;top:52px;left:204px;width:300px;height:40px;outline:2px solid orange"></div>
       </body></html>`);

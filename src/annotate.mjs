@@ -85,9 +85,14 @@ export async function cropRegion(page, rect, pad) {
     .evaluate(() => {
       const css = getComputedStyle(document.documentElement);
       const inset = (name) => parseFloat(css.getPropertyValue(name)) || 0;
+      // The rail's width is a clamp() of the window, and a custom property
+      // hands that back as text, so its edge is measured rather than parsed.
+      const rail = document.querySelector('.ayna-ov-console')?.getBoundingClientRect();
       return {
         x: scrollX, y: scrollY, w: innerWidth, h: innerHeight,
-        top: inset('--ayna-inset-top'), left: inset('--ayna-inset-left'), bottom: inset('--ayna-inset-bottom'),
+        top: inset('--ayna-inset-top'),
+        left: rail && rail.width && rail.height ? Math.max(0, rail.right) : 0,
+        bottom: inset('--ayna-inset-bottom'),
       };
     })
     .catch(() => null);
@@ -546,8 +551,11 @@ export async function runAnnotate({
     one; this mirror keeps the panel working when there is not.
   */
   const feed = [];
+  // Its own counter: once the mirror is trimmed its length stops growing, and
+  // a seq taken from the length repeated, so a reader past it saw nothing new.
+  let feedSeq = 0;
   const pushFeed = (e) => {
-    feed.push({ seq: feed.length + 1, at: Date.now(), ...e });
+    feed.push({ seq: ++feedSeq, at: Date.now(), ...e });
     if (feed.length > 500) feed.shift();
   };
   /*
