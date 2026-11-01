@@ -123,8 +123,19 @@
     .${NS}-hint.${NS}-warn { color: var(--ayna-warn, #e0a458); }
     .${NS}-bar .${NS}-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* A segmented control: which mode is on is a fact, not something to infer. */
+    /*
+      No gap and no padding: the buttons tile the whole track.
+
+      With a 2px gap and a 3px inset there were strips inside what reads as one
+      control that belonged to no button, so sliding across it switched the
+      cursor from hand to arrow at every edge — a cursor that vibrates. Rounded
+      buttons left the same dead wedges at their corners, because hit-testing
+      follows border-radius. So the buttons are square and tile the track, the
+      rounded pill is drawn inside each one by ::before, and the track clips its
+      own outer corners.
+    */
     .${NS}-modes {
-      display: flex; gap: 2px; padding: 3px; border-radius: 10px;
+      display: flex; gap: 0; padding: 0; border-radius: 10px; overflow: hidden;
       background: rgba(255,255,255,.04); border: 1px solid var(--ayna-line, rgba(255,255,255,.075));
     }
 
@@ -463,9 +474,16 @@
       for ayna's own accent — the selected mode had no visible label at all.
     */
     .${NS}-modes button {
-      height: 28px; padding: 0 12px; border: 0; border-radius: 7px; gap: 6px;
-      background: transparent; color: var(--ayna-muted, rgba(255,255,255,.62)); font-weight: 600;
+      position: relative; isolation: isolate; height: 34px; padding: 0 13px; gap: 6px;
+      border: 0; border-radius: 0; background: transparent;
+      color: var(--ayna-muted, rgba(255,255,255,.62)); font-weight: 600;
     }
+    .${NS}-modes button::before {
+      content: ''; position: absolute; inset: 3px 1px; z-index: -1; border-radius: 7px;
+      background: transparent; transition: background-color .15s;
+    }
+    .${NS}-modes button:first-child::before { left: 3px; }
+    .${NS}-modes button:last-child::before { right: 3px; }
     .${NS}-modes button svg { width: 14px; height: 14px; flex: none; }
     /*
       Short of room, the modes keep their icons and drop their words — the
@@ -478,11 +496,13 @@
       .${NS}-modes button { padding: 0 10px; }
       .${NS}-bar .${NS}-hint { display: none; }
     }
-    .${NS}-modes button:hover { background: rgba(255,255,255,.06); color: var(--ayna-text, #f4f2ef); filter: none; }
-    .${NS}-modes button.${NS}-on {
-      background: rgba(255,255,255,.12); color: var(--ayna-text, #f4f2ef);
-      box-shadow: 0 1px 2px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08);
+    .${NS}-modes button:hover { background: transparent; color: var(--ayna-text, #f4f2ef); filter: none; }
+    .${NS}-modes button:hover::before { background: rgba(255,255,255,.06); }
+    .${NS}-modes button.${NS}-on { color: var(--ayna-text, #f4f2ef); }
+    .${NS}-modes button.${NS}-on::before {
+      background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.10), 0 1px 2px rgba(0,0,0,.45);
     }
+    .${NS}-modes button:focus-visible { outline-offset: -2px; }
     .${NS}-modes button.${NS}-on svg { color: var(--ayna-accent, #de9446); }
     /* A count on a button is a chip, not a "· 2" tacked onto its label. */
     .${NS}-chip {

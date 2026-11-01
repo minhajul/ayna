@@ -492,6 +492,49 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
     assertReadable(await measureControls(undefined));
   });
 
+  test('the mode switcher has no dead strips between its buttons', async () => {
+    const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1></main>');
+    const dir = await mkdtemp(path.join(tmpdir(), 'ayna-modes-'));
+    try {
+      let dead = null;
+      await runAnnotate({
+        browser,
+        url,
+        theme: DEFAULT_THEME,
+        outDir: path.join(dir, 'out'),
+        projectDir: dir,
+        viewport: { width: 1200, height: 820 },
+        onReady: async (page) => {
+          await page.waitForSelector('.ayna-ov-modes button');
+          dead = await page.evaluate(() => {
+            // A dead strip is a point that lands on the switcher itself and on no
+            // button in it. Its rounded outer corners are outside the control.
+            const track = document.querySelector('.ayna-ov-modes');
+            const r = track.getBoundingClientRect();
+            const misses = [];
+            for (let x = r.left + 1.5; x < r.right - 1.5; x += 1) {
+              for (let y = r.top + 1.5; y < r.bottom - 1.5; y += 2) {
+                // The four rounded corners are the switcher's own border curving in.
+                const corner = (x - r.left < 10 || r.right - x < 10) && (y - r.top < 10 || r.bottom - y < 10);
+                if (corner) continue;
+                const el = document.elementFromPoint(x, y);
+                if (el === track) misses.push(Math.round(x - r.left) + ',' + Math.round(y - r.top));
+              }
+            }
+            return misses;
+          });
+          await page.close();
+        },
+      });
+      // A strip that belongs to no button turns the hand into an arrow as the
+      // pointer slides across the control, which reads as a vibrating cursor.
+      assert.deepEqual(dead.slice(0, 10), [], `${dead.length} points in the switcher hit no button: ${dead.slice(0, 30).join(' ')}`);
+    } finally {
+      srv.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("the comment box's hint sits on its buttons' line", async () => {
     const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1></main>');
     const dir = await mkdtemp(path.join(tmpdir(), 'ayna-hintline-'));
