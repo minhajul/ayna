@@ -618,7 +618,9 @@
       border-radius: 6px; border: 1px solid var(--ayna-panel-line, rgba(255,255,255,.10));
     }
     .${NS}-row {
-      display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;
+      /* Centred, so "Esc to cancel" reads on the buttons' line rather than
+         hanging from the top of a box stretched to their height. */
+      display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 10px;
       flex: none;  /* pinned: the action row is never scrolled away */
     }
     .${NS}-row button {

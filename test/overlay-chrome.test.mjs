@@ -492,6 +492,41 @@ describe('the review panel meets the floor it enforces', { skip: !hasBrowser && 
     assertReadable(await measureControls(undefined));
   });
 
+  test("the comment box's hint sits on its buttons' line", async () => {
+    const { srv, url } = await serve('<main style="padding:60px"><h1 class="title">Hello</h1></main>');
+    const dir = await mkdtemp(path.join(tmpdir(), 'ayna-hintline-'));
+    try {
+      let centres = null;
+      await runAnnotate({
+        browser,
+        url,
+        theme: DEFAULT_THEME,
+        outDir: path.join(dir, 'out'),
+        projectDir: dir,
+        viewport: { width: 1200, height: 820 },
+        onReady: async (page) => {
+          await page.click('.title');
+          await page.waitForSelector('.ayna-ov-pop .ayna-ov-esc', { timeout: 10000 });
+          centres = await page.evaluate(() => {
+            const mid = (r) => r.top + r.height / 2;
+            const text = document.createRange();
+            text.selectNodeContents(document.querySelector('.ayna-ov-pop .ayna-ov-esc'));
+            return {
+              hint: mid(text.getBoundingClientRect()),
+              button: mid(document.querySelector('.ayna-ov-pop .ayna-ov-save').getBoundingClientRect()),
+            };
+          });
+          await page.close();
+        },
+      });
+      // A row left to stretch hung the hint's text 9px above the buttons' centre.
+      assert.ok(Math.abs(centres.hint - centres.button) <= 1, `hint centre ${centres.hint}, button centre ${centres.button}`);
+    } finally {
+      srv.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   /*
     And the theme the CLI applies, which is what every real install renders:
     loadConfig merges DEFAULT_THEME whether or not a project has a config.
