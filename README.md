@@ -120,19 +120,27 @@ and the next session is told before it has to ask.
 
 ### 4. Watch it happen without leaving the page
 
-![The activity rail showing the round sent, Claude replying, and the change landing](docs/screens/04-console.png)
+![The activity rail: a round's notes, sent, with Claude replying on the page](docs/screens/04-console.png)
 
 The rail carries both directions. Claude narrates with `ayna say`; anything you
 type back arrives as an event it treats as a comment. You never go to the
 terminal.
 
+Each round is a card: your notes with what they pointed at, the files Claude
+changed — each one opens to its diff — what ayna measured, and your verdict.
+The corner says whose move it is. The rail shows this window; earlier ones
+fold into a single line that says what they left open.
+
 ### 5. Judge each change where it happened
 
-![Review markers on the changed elements, with the gate's answer in the rail](docs/screens/05-review.png)
+![Review markers on the changed elements, with the round's files and the gate's answer in the rail](docs/screens/05-review.png)
 
 Each change gets **Looks right** / **Needs work** on the element itself. And when
-the changes land, ayna re-measures and says so — `no measurable faults left`, or
-what is still there. *"Done" is a prediction until something looks.*
+the changes land, ayna re-measures against the page as it was before the round
+and says so — `No new faults · 8 already there`, or what the round added.
+*"Done" is a prediction until something looks.* If a round was a mistake,
+**Undo this round** puts its files back, and refuses if anything has touched
+them since.
 
 Nothing is approved on your behalf. Closing the window keeps whatever you did not
 judge.
@@ -368,6 +376,7 @@ src/annotate.mjs    the review window
 src/overlay.js      the in-page UI (runs in the browser)
 src/inspect.mjs     one region, headless — the agent QA entry point
 src/audit.mjs       what the page can prove
+src/rounds.mjs      what a round changed, and taking it back
 src/verify.mjs      does this task still apply?
 src/worker.mjs      the queue, unattended
 src/db.mjs          sqlite: sessions, tabs, tasks, events

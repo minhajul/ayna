@@ -9,7 +9,7 @@
 
   Usage: node scripts/readme-shots.mjs
 */
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,9 +28,12 @@ const BIN = path.join(ROOT, 'bin', 'ayna.mjs');
 
 async function main() {
   await mkdir(OUT, { recursive: true });
-  const server = await serveStatic(path.join(ROOT, 'demo'), 4620);
-  const browser = await openBrowser({ headless: true });
   const dir = await mkdtemp(path.join(tmpdir(), 'ayna-readme-'));
+  // A throwaway copy, so step 5 can make a real edit without touching demo/.
+  const site = path.join(dir, 'site');
+  await cp(path.join(ROOT, 'demo'), site, { recursive: true });
+  const server = await serveStatic(site, 4620);
+  const browser = await openBrowser({ headless: true });
   const store = await openStore(dir);
   const shots = [];
 
@@ -45,7 +48,7 @@ async function main() {
     browser,
     url: server.url,
     outDir: path.join(dir, 'out'),
-    projectDir: dir,
+    projectDir: site,
     store,
     viewport: { width: 1440, height: 860 },
     onReady: async (page) => {
@@ -95,8 +98,12 @@ async function main() {
       await page.waitForTimeout(1400);
       await shoot(page, '04-console');
 
-      // 5 — the verdict, on each element, with the gate's answer beside it.
-      await page.click('[data-act=applied]');
+      // 5 — the verdict, on each element, with the round's files and the
+      // gate's answer beside it. A real edit for the first note, as in
+      // make-demo-gif.mjs, so the card lists a change that actually happened.
+      const cssFile = path.join(site, 'styles.css');
+      const css = await readFile(cssFile, 'utf8');
+      await writeFile(cssFile, css.replace('.hero-sub {\n  margin-top: var(--s3);', '.hero-sub {\n  margin-top: var(--s4);'));
       await page.waitForFunction(() => document.querySelector('[data-act=close]') !== null, {
         timeout: 20000,
       });
