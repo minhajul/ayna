@@ -500,8 +500,8 @@ describe('multi-page review', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, 
               the button now, which is the thing that opens the list it counts.
             */
             assert.match(
-              await page.evaluate(() => document.querySelector('[data-act=tasks]')?.textContent),
-              /Tasks · 1/,
+              await page.evaluate(() => document.querySelector('[data-act=tasks]')?.getAttribute('aria-label')),
+              /Tasks, 1 pending/,
               'earlier comments are not forgotten across navigation',
             );
 
@@ -808,8 +808,8 @@ describe('removing a comment', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' },
             );
             // Same move as above: the count is on the Tasks button now.
             assert.match(
-              await page.evaluate(() => document.querySelector('[data-act=tasks]').textContent),
-              /Tasks · 2/,
+              await page.evaluate(() => document.querySelector('[data-act=tasks]').getAttribute('aria-label')),
+              /Tasks, 2 pending/,
             );
 
             await page.click('[data-act=send]');
@@ -2616,8 +2616,8 @@ describe('the task list', { skip: !hasBrowser && 'AYNA_SKIP_BROWSER set' }, () =
             await page.waitForTimeout(600);
 
             assert.match(
-              await page.evaluate(() => document.querySelector('[data-act=tasks]').textContent),
-              /Tasks · 2/,
+              await page.evaluate(() => document.querySelector('[data-act=tasks]').getAttribute('aria-label')),
+              /Tasks, 2 pending/,
               'the bar counts pending work without the panel being open',
             );
 
