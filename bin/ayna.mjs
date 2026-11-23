@@ -59,6 +59,7 @@ import restoreCommand from '../src/commands/restore.mjs';
 import recordCommand from '../src/commands/record.mjs';
 import critiqueCommand from '../src/commands/critique.mjs';
 import reportCommand from '../src/commands/report.mjs';
+import loopCommand from '../src/commands/loop.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -455,16 +456,8 @@ async function main() {
     case 'report':
       return reportCommand(ctx);
 
-    case 'loop': {
-      await runLoop(cfg, {
-        iterations: values.iterations ? Number(values.iterations) : undefined,
-        model: values.model,
-        headless: headlessMode(cfg),
-        open: values.open,
-        brain: values.brain,
-      });
-      return;
-    }
+    case 'loop':
+      return loopCommand(ctx);
 
     default:
       fail(`unknown command: ${command}`);
