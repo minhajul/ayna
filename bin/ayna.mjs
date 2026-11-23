@@ -44,6 +44,7 @@ import sayCommand from '../src/commands/say.mjs';
 import eventsCommand from '../src/commands/events.mjs';
 import designCommand from '../src/commands/design.mjs';
 import tasteCommand from '../src/commands/taste.mjs';
+import watchCommand from '../src/commands/watch.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -394,26 +395,8 @@ async function main() {
     case 'taste':
       return tasteCommand(ctx);
 
-    case 'watch': {
-      // Delivery that outlives any window: the store is the queue.
-      const store = await openStore(PROJECT);
-      await importLegacy(PROJECT, store);
-      const controller = new AbortController();
-      const { stop } = await watchTasks({
-        projectDir: PROJECT,
-        signal: controller.signal,
-        onEvent: (e) => console.log(JSON.stringify(e)),
-      });
-      for (const sig of ['SIGINT', 'SIGTERM']) {
-        process.on(sig, () => {
-          stop();
-          controller.abort();
-          process.exit(0);
-        });
-      }
-      await new Promise(() => {}); // watch until killed
-      return;
-    }
+    case 'watch':
+      return watchCommand(ctx);
 
     case 'task': {
       const id = positionals[1];
