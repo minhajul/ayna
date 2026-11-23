@@ -56,6 +56,7 @@ import statusCommand from '../src/commands/status.mjs';
 import commentsCommand from '../src/commands/comments.mjs';
 import snapshotCommand from '../src/commands/snapshot.mjs';
 import restoreCommand from '../src/commands/restore.mjs';
+import recordCommand from '../src/commands/record.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -443,22 +444,8 @@ async function main() {
     case 'restore':
       return restoreCommand(ctx);
 
-    case 'record': {
-      await mkdir(SESSION_DIR, { recursive: true });
-      const entries = existsSync(JOURNAL) ? JSON.parse(await readFile(JOURNAL, 'utf8')) : [];
-      const last = existsSync(path.join(SESSION_DIR, 'last-shot.json'))
-        ? JSON.parse(await readFile(path.join(SESSION_DIR, 'last-shot.json'), 'utf8'))
-        : { shots: [] };
-      entries.push({
-        n: entries.length + 1,
-        score: values.score ? Number(values.score) : null,
-        note: values.note ?? '',
-        shots: last.shots,
-      });
-      await writeFile(JOURNAL, JSON.stringify(entries, null, 2));
-      ok(`recorded round ${entries.length}${values.score ? ` (${values.score}/10)` : ''}`);
-      return;
-    }
+    case 'record':
+      return recordCommand(ctx);
 
     case 'critique': {
       const brain = resolveBrain(cfg, values.brain);
