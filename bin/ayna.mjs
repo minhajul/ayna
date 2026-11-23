@@ -52,6 +52,7 @@ import flowCommand from '../src/commands/flow.mjs';
 import annotateCommand from '../src/commands/annotate.mjs';
 import appliedCommand from '../src/commands/applied.mjs';
 import followCommand from '../src/commands/follow.mjs';
+import statusCommand from '../src/commands/status.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -427,28 +428,8 @@ async function main() {
     case 'follow':
       return followCommand(ctx);
 
-    case 'status': {
-      const session = await readSession();
-      if (!session) {
-        console.log(JSON.stringify({ phase: 'none' }));
-        return;
-      }
-      if (!session.live) {
-        console.log(
-          JSON.stringify({
-            phase: 'stale',
-            hint: 'the window that owned this review is gone (the session that opened it ended). Start a new one with `ayna annotate`.',
-            lastComments: session.file,
-          }),
-        );
-        return;
-      }
-      const statusFile = path.join(session.dir, 'status.json');
-      console.log(
-        existsSync(statusFile) ? await readFile(statusFile, 'utf8') : JSON.stringify({ phase: 'none' }),
-      );
-      return;
-    }
+    case 'status':
+      return statusCommand(ctx);
 
     case 'comments': {
       /*
