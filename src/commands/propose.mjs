@@ -25,5 +25,4 @@ export default async function proposeCommand(ctx) {
   });
   if (values.json) console.log(JSON.stringify(task, null, 2));
   else ok(`proposed ${task.id} — waiting for the user`);
-  return;
 }

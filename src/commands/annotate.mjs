@@ -110,5 +110,4 @@ export default async function annotateCommand(ctx) {
       console.log(`     ${dim(`source: ${c.sourceCandidates[0].file}:${c.sourceCandidates[0].line}`)}`);
     }
   }
-  return;
 }

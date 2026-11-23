@@ -101,5 +101,4 @@ export default async function inspectCommand(ctx) {
     await browser.close().catch(() => {});
     await server?.close().catch(() => {});
   }
-  return;
 }

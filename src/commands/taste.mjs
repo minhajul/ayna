@@ -35,5 +35,4 @@ export default async function tasteCommand(ctx) {
     console.log(summarizeTaste(result));
     if (raised.proposed) ok(`${raised.proposed} raised as proposals — approve them with \`ayna task <id> --status open\``);
   }
-  return;
 }

@@ -105,5 +105,4 @@ export default async function auditCommand(ctx) {
       ? 'no layout faults'
       : `${report.counts.covered} covered · ${report.counts.offscreen} cut off · ${report.counts.overlaps} overlapping · ${report.counts.clipped} clipped`,
   );
-  return;
 }

@@ -52,5 +52,4 @@ export default async function critiqueCommand(ctx) {
     console.log(`  ${sev(`[${i.severity}]`)} ${bold(i.area)} — ${i.problem}`);
     console.log(`    ${dim(`→ ${i.fix}`)}\n`);
   }
-  return;
 }

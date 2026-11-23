@@ -63,5 +63,4 @@ export default async function agentsCommand(ctx) {
   const owed = all.filter(isPending).length;
   console.log('');
   ok(`${live.length} agent(s) · ${tabs.length} tab(s) · ${owed} task(s) outstanding`);
-  return;
 }

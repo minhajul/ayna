@@ -82,5 +82,4 @@ export default async function watchdCommand(ctx) {
     onEvent: (e) => values.events && console.log(JSON.stringify(e)),
   });
   await releasePidFile(PROJECT);
-  return;
 }

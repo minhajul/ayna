@@ -144,5 +144,4 @@ export default async function flowCommand(ctx) {
     record.completed ? `all ${record.steps.length} steps completed` : `stopped at step ${record.failedAt.n}: ${record.failedAt.error}`,
   );
   info(`${path.relative(PROJECT, outDir)}/flow.json`);
-  return;
 }

@@ -37,5 +37,4 @@ export default async function eventsCommand(ctx) {
   } else {
     console.log(JSON.stringify({ ...result, count: result.events.length }, null, 2));
   }
-  return;
 }

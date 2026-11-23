@@ -32,5 +32,4 @@ export default async function brainsCommand(ctx) {
   const ready = rows.filter((b) => b.installed);
   if (ready.length) ok(`${ready.length} available · default is "${cfg.brain ?? 'claude'}"`);
   else warn('none installed — ayna work has nothing to drive, but you can still fix tasks yourself');
-  return;
 }

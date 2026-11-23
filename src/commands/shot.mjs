@@ -62,5 +62,4 @@ export default async function shotCommand(ctx) {
     ok(`${s.route ?? '/'} ${s.viewport} → ${path.relative(PROJECT, s.file)}`);
   }
   if (cap.consoleErrors.length) warn(`console errors: ${cap.consoleErrors.length}`);
-  return;
 }

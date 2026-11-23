@@ -24,5 +24,4 @@ export default async function statusCommand(ctx) {
   console.log(
     existsSync(statusFile) ? await readFile(statusFile, 'utf8') : JSON.stringify({ phase: 'none' }),
   );
-  return;
 }

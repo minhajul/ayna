@@ -10,5 +10,4 @@ export default async function loopCommand(ctx) {
     open: values.open,
     brain: values.brain,
   });
-  return;
 }

@@ -71,5 +71,4 @@ export default async function previewCommand(ctx) {
     else if (answer.event === 'preview-accepted') ok(`they kept "${answer.label}" — write it into the source`);
     else info('none of them — try something else');
   }
-  return;
 }

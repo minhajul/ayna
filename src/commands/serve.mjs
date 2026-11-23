@@ -11,5 +11,4 @@ export default async function serveCommand(ctx) {
   ok(`${cfg.target.root}/ → ${server.url}`);
   info('ctrl-c to stop');
   await new Promise(() => {});
-  return;
 }

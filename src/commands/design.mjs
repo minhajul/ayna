@@ -90,5 +90,4 @@ export default async function designCommand(ctx) {
   );
   info('`--json` returns the brief an agent acts on; read the screenshots before changing anything');
   process.exitCode = result.clean ? 0 : 1;
-  return;
 }

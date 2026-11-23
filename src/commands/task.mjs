@@ -17,5 +17,4 @@ export default async function taskCommand(ctx) {
   const updated = await store.update(id, { status: wanted }, values.note);
   if (!updated) throw new Error(`no such task: ${id}`);
   ok(`${id} → ${wanted}`);
-  return;
 }

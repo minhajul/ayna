@@ -20,5 +20,4 @@ export default async function recordCommand(ctx) {
   });
   await writeFile(JOURNAL, JSON.stringify(entries, null, 2));
   ok(`recorded round ${entries.length}${values.score ? ` (${values.score}/10)` : ''}`);
-  return;
 }

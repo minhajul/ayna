@@ -47,5 +47,4 @@ export default async function reportCommand(ctx) {
   });
   openInDesktop(file);
   ok(`opened ${path.relative(process.cwd(), file)}`);
-  return;
 }

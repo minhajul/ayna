@@ -77,5 +77,4 @@ export default async function qaCommand(ctx) {
 
   // A QA run has to be usable as a gate.
   if (suite.failed) process.exitCode = 1;
-  return;
 }

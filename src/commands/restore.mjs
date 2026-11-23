@@ -17,5 +17,4 @@ export default async function restoreCommand(ctx) {
   if (!existsSync(src)) throw new Error('no snapshot to restore — run `ayna snapshot` first');
   await restore(src, cfg.targetDir);
   ok(`restored ${path.relative(PROJECT, cfg.targetDir)}`);
-  return;
 }

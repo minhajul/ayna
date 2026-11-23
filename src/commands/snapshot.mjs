@@ -12,5 +12,4 @@ export default async function snapshotCommand(ctx) {
     : path.join(SESSION_DIR, 'snapshot');
   await snapshot(cfg.targetDir, dest);
   ok(`snapshotted ${path.relative(PROJECT, cfg.targetDir)} — restore with \`ayna restore\``);
-  return;
 }

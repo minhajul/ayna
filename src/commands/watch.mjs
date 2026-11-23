@@ -21,5 +21,4 @@ export default async function watchCommand(ctx) {
     });
   }
   await new Promise(() => {}); // watch until killed
-  return;
 }

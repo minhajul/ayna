@@ -84,5 +84,4 @@ export default async function commentsCommand(ctx) {
   for (const c of manifest.comments) {
     console.log(`${bold(`#${c.n}`)} ${c.selector}\n   "${c.comment}"`);
   }
-  return;
 }

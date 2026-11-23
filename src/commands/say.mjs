@@ -24,5 +24,4 @@ export default async function sayCommand(ctx) {
   if (values.json) console.log(JSON.stringify({ ok: true, seq, text, live: heard }));
   else if (heard) ok('said it — it is on the page now');
   else warn('no review window is open — said it to the log, which the next window will show');
-  return;
 }

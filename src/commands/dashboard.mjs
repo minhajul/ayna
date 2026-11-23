@@ -26,5 +26,4 @@ export default async function dashboardCommand(ctx) {
   );
   if (values.open) openInDesktop(file);
   else info('--open to view it in your browser');
-  return;
 }

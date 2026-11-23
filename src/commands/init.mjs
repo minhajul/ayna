@@ -15,5 +15,4 @@ export default async function initCommand(ctx) {
   }
   const file = await writeConfig(PROJECT);
   ok(`wrote ${path.relative(PROJECT, file)} — set target.url or target.root, then run \`ayna shot\``);
-  return;
 }

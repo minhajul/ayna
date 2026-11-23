@@ -29,5 +29,4 @@ export default async function appliedCommand(ctx) {
   */
   if (values['no-wait']) return;
   await followSession(path.join(session.dir, 'status.json'), SESSION_DIR, { settle: true });
-  return;
 }

@@ -42,5 +42,4 @@ export default async function loginCommand(ctx) {
     fail(result.closed ? 'window closed before the sign-in finished' : 'timed out waiting for the sign-in');
     process.exitCode = 1;
   }
-  return;
 }

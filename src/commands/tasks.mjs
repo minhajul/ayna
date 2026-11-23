@@ -53,5 +53,4 @@ export default async function tasksCommand(ctx) {
   }
   console.log('');
   ok(`${stats.pending} pending · ${stats.approved} approved · ${stats.total} total`);
-  return;
 }

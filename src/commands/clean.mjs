@@ -75,5 +75,4 @@ export default async function cleanCommand(ctx) {
   ok(`removed ${removed} old run(s), freed ${(freed / 1024 / 1024).toFixed(1)} MB`);
   if (pruned) info(`pruned ${pruned} event(s) older than 30 days that every consumer had already read`);
   info(`kept the newest ${keep} of each · tasks, sessions and the login profile untouched`);
-  return;
 }

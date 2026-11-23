@@ -14,5 +14,4 @@ export default async function followCommand(ctx) {
     return;
   }
   await followSession(path.join(session.dir, 'status.json'), SESSION_DIR);
-  return;
 }

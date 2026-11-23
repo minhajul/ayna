@@ -63,5 +63,4 @@ export default async function workCommand(ctx) {
     await browser?.close().catch(() => {});
     await server?.close().catch(() => {});
   }
-  return;
 }

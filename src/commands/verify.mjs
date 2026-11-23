@@ -66,5 +66,4 @@ export default async function verifyCommand(ctx) {
     console.log('');
     ok(`${applied.obsolete} closed as already fixed · ${applied.asked} need your word · ${applied.untouched} unchanged`);
   }
-  return;
 }
