@@ -53,7 +53,8 @@ without tests.
 ```
 SKILL.md            the in-session loop — what Claude actually follows
 commands/           slash commands (/ayna, /ayna:look, /ayna:review)
-bin/ayna.mjs        CLI
+bin/ayna.mjs        CLI: reads the arguments and picks the command
+src/commands/       one file per CLI command (`ayna shot`, `ayna annotate`, …)
 src/annotate.mjs    click-to-comment capture, crops, source mapping
 src/overlay.js      the in-page UI — runs in the browser, not in Node
 src/browser.mjs     Chrome control, screenshots, page diagnostics

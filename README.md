@@ -488,7 +488,8 @@ That is the script's whole reason to exist.
 ```
 SKILL.md            the in-session loop — what a Claude session reads
 commands/           /ayna:fix, :look, :loop, :review
-bin/ayna.mjs        the CLI
+bin/ayna.mjs        the CLI: reads the arguments and picks the command
+src/commands/       one file per CLI command (`ayna shot`, `ayna annotate`, …)
 src/annotate.mjs    the review window
 src/overlay.js      the in-page UI (runs in the browser)
 src/inspect.mjs     one region, headless — the agent QA entry point

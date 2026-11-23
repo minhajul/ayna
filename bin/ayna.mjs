@@ -1,29 +1,14 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { readdir, mkdir, access, readFile, writeFile, rm, stat } from 'node:fs/promises';
+import { readdir, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadConfig, writeConfig } from '../src/config.mjs';
-import { serveStatic } from '../src/server.mjs';
+import { loadConfig } from '../src/config.mjs';
 import { startTarget } from '../src/target.mjs';
-import { openBrowser, capture, captureRoutes, openPersistentContext, gotoSettled } from '../src/browser.mjs';
-import { runAgent, ensureAgent } from '../src/brain.mjs';
-import { resolveBrain } from '../src/brains.mjs';
-import { CRITIQUE_SCHEMA, critiquePrompt } from '../src/prompts.mjs';
-import { runLoop } from '../src/loop.mjs';
-import { snapshot, restore } from '../src/snapshot.mjs';
-import { runAnnotate, loadComments } from '../src/annotate.mjs';
-import { runFlow, summarizeFlow } from '../src/flow.mjs';
-import { openStore, importLegacy, isPending, isProposal } from '../src/tasks.mjs';
-import { auditPage, summarizeAudit } from '../src/audit.mjs';
-import { loadFlows, runSuite, compareWithBaseline } from '../src/qa.mjs';
-import { watchTasks } from '../src/watch.mjs';
-import { waitForLogin } from '../src/login.mjs';
-import { writeReport } from '../src/report.mjs';
-import { banner, step, ok, info, warn, fail, dim, bold, cyan, green, yellow, red, openInDesktop } from '../src/log.mjs';
+import { openBrowser } from '../src/browser.mjs';
+import { info, fail, bold } from '../src/log.mjs';
 
 import initCommand from '../src/commands/init.mjs';
 import serveCommand from '../src/commands/serve.mjs';
