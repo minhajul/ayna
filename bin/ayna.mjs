@@ -38,6 +38,7 @@ import watchdCommand from '../src/commands/watchd.mjs';
 import workCommand from '../src/commands/work.mjs';
 import verifyCommand from '../src/commands/verify.mjs';
 import previewCommand from '../src/commands/preview.mjs';
+import brainsCommand from '../src/commands/brains.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -392,38 +393,8 @@ async function main() {
       surfaced it — so "which window is mine?" and "is another agent already on
       this?" had no answer short of reading the tables by hand.
     */
-    /* What can actually do the work on this machine, and what is only an editor. */
-    case 'brains': {
-      const { surveyBrains, EDITORS } = await import('../src/brains.mjs');
-      const rows = await surveyBrains(cfg);
-
-      if (values.json) {
-        console.log(JSON.stringify({ brains: rows, editors: EDITORS, chosen: cfg.brain ?? 'claude' }));
-        return;
-      }
-
-      banner('ayna brains');
-      info('a brain is a CLI ayna can hand a prompt and wait for — `ayna work --brain <name>`');
-      for (const b of rows) {
-        const mark = b.installed ? green('✓') : dim('·');
-        console.log(
-          `  ${mark} ${bold(b.name.padEnd(9))} ${dim((b.cmd + ' ' + b.args.join(' ')).padEnd(24))}` +
-            (b.installed ? '' : dim(' not installed')) +
-            (b.custom ? cyan(' (yours)') : ''),
-        );
-        console.log(`      ${dim(b.note)}`);
-      }
-
-      console.log('');
-      info('these use ayna but cannot be driven by it — run ayna from their terminal:');
-      for (const [name, why] of Object.entries(EDITORS)) console.log(`    ${dim('·')} ${bold(name)} ${dim('— ' + why)}`);
-
-      console.log('');
-      const ready = rows.filter((b) => b.installed);
-      if (ready.length) ok(`${ready.length} available · default is "${cfg.brain ?? 'claude'}"`);
-      else warn('none installed — ayna work has nothing to drive, but you can still fix tasks yourself');
-      return;
-    }
+    case 'brains':
+      return brainsCommand(ctx);
 
     case 'agents': {
       const { openSessions } = await import('../src/sessions.mjs');
