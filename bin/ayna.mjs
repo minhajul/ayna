@@ -26,6 +26,7 @@ import { writeReport } from '../src/report.mjs';
 import { banner, step, ok, info, warn, fail, dim, bold, cyan, green, yellow, red, openInDesktop } from '../src/log.mjs';
 
 import initCommand from '../src/commands/init.mjs';
+import serveCommand from '../src/commands/serve.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -322,16 +323,8 @@ async function main() {
     case 'init':
       return initCommand(ctx);
 
-    case 'serve': {
-      const wanted = values.port ? Number(values.port) : cfg.target.port;
-      if (values.port && !Number.isInteger(wanted)) throw new Error(`--port wants a number, got "${values.port}"`);
-      const server = await serveStatic(cfg.targetDir, wanted);
-      banner('ayna serve');
-      ok(`${cfg.target.root}/ → ${server.url}`);
-      info('ctrl-c to stop');
-      await new Promise(() => {});
-      return;
-    }
+    case 'serve':
+      return serveCommand(ctx);
 
     case 'shot': {
       const { browser, url, close, outDir } = await prepare(cfg, 'shot');
