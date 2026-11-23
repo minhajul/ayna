@@ -45,6 +45,7 @@ import eventsCommand from '../src/commands/events.mjs';
 import designCommand from '../src/commands/design.mjs';
 import tasteCommand from '../src/commands/taste.mjs';
 import watchCommand from '../src/commands/watch.mjs';
+import taskCommand from '../src/commands/task.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -398,22 +399,8 @@ async function main() {
     case 'watch':
       return watchCommand(ctx);
 
-    case 'task': {
-      const id = positionals[1];
-      if (!id) throw new Error('which task? ayna task task-0003 --status in_progress');
-      const store = await openStore(PROJECT);
-      const wanted = values.status;
-      if (!wanted) {
-        const t = await store.get(id);
-        if (!t) throw new Error(`no such task: ${id}`);
-        console.log(JSON.stringify(t, null, 2));
-        return;
-      }
-      const updated = await store.update(id, { status: wanted }, values.note);
-      if (!updated) throw new Error(`no such task: ${id}`);
-      ok(`${id} → ${wanted}`);
-      return;
-    }
+    case 'task':
+      return taskCommand(ctx);
 
     case 'clean': {
       /*
