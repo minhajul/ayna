@@ -54,6 +54,7 @@ import appliedCommand from '../src/commands/applied.mjs';
 import followCommand from '../src/commands/follow.mjs';
 import statusCommand from '../src/commands/status.mjs';
 import commentsCommand from '../src/commands/comments.mjs';
+import snapshotCommand from '../src/commands/snapshot.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -435,15 +436,8 @@ async function main() {
     case 'comments':
       return commentsCommand(ctx);
 
-    case 'snapshot': {
-      const session = process.env.AYNA_SESSION;
-      const dest = session
-        ? path.join(SESSION_DIR, 'snapshots', String(session).replace(/[^a-zA-Z0-9_-]/g, '_'))
-        : path.join(SESSION_DIR, 'snapshot');
-      await snapshot(cfg.targetDir, dest);
-      ok(`snapshotted ${path.relative(PROJECT, cfg.targetDir)} — restore with \`ayna restore\``);
-      return;
-    }
+    case 'snapshot':
+      return snapshotCommand(ctx);
 
     case 'restore': {
       const session = process.env.AYNA_SESSION;
