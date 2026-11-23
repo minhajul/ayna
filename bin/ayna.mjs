@@ -58,6 +58,7 @@ import snapshotCommand from '../src/commands/snapshot.mjs';
 import restoreCommand from '../src/commands/restore.mjs';
 import recordCommand from '../src/commands/record.mjs';
 import critiqueCommand from '../src/commands/critique.mjs';
+import reportCommand from '../src/commands/report.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -451,48 +452,8 @@ async function main() {
     case 'critique':
       return critiqueCommand(ctx);
 
-    case 'report': {
-      // An in-session loop journals its rounds; build the report from those first.
-      if (existsSync(JOURNAL)) {
-        const entries = JSON.parse(await readFile(JOURNAL, 'utf8'));
-        if (entries.length < 2) {
-          warn('need at least two recorded rounds to show a before/after — keep going');
-          return;
-        }
-        const iterations = entries.slice(1).map((e, idx) => ({
-          n: idx + 1,
-          before: { shots: entries[idx].shots },
-          after: { shots: e.shots },
-          critique: { score: e.score ?? '—', verdict: e.note, issues: [] },
-          changes: [],
-        }));
-        const file = await writeReport({
-          cfg,
-          runId: 'session',
-          runDir: SESSION_DIR,
-          iterations,
-          stopReason: `${entries.length} round(s) in this session`,
-          totalCost: 0,
-        });
-        ok(`report: ${path.relative(PROJECT, file)}`);
-        if (values.open) openInDesktop(file);
-        return;
-      }
-
-      const runs = await readdir(cfg.runsDir).catch(() => []);
-      const latest = runs.filter((r) => !r.startsWith('.')).sort().pop();
-      if (!latest) {
-        warn('no runs yet — try `ayna loop`');
-        return;
-      }
-      const file = path.join(cfg.runsDir, latest, 'report.html');
-      await access(file).catch(() => {
-        throw new Error(`no report in ${latest}`);
-      });
-      openInDesktop(file);
-      ok(`opened ${path.relative(process.cwd(), file)}`);
-      return;
-    }
+    case 'report':
+      return reportCommand(ctx);
 
     case 'loop': {
       await runLoop(cfg, {
