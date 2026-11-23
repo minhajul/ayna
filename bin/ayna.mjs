@@ -51,6 +51,7 @@ import auditCommand from '../src/commands/audit.mjs';
 import flowCommand from '../src/commands/flow.mjs';
 import annotateCommand from '../src/commands/annotate.mjs';
 import appliedCommand from '../src/commands/applied.mjs';
+import followCommand from '../src/commands/follow.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -423,20 +424,8 @@ async function main() {
       return appliedCommand(ctx);
 
     case 'wait':
-    case 'follow': {
-      // Blocks until the user sends a round (or closes the window), then exits.
-      // Run this in the background so you are woken the moment they hit Send —
-      // polling `status` by hand means the user sits there waiting on you.
-      const session = await readSession();
-      if (!session) throw new Error('no annotate session — run `ayna annotate` first');
-      if (!session.live) {
-        // Never block on a window that no longer exists.
-        console.log(JSON.stringify({ phase: 'stale', done: true }));
-        return;
-      }
-      await followSession(path.join(session.dir, 'status.json'), SESSION_DIR);
-      return;
-    }
+    case 'follow':
+      return followCommand(ctx);
 
     case 'status': {
       const session = await readSession();
