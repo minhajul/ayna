@@ -10,41 +10,7 @@ import { startTarget } from '../src/target.mjs';
 import { openBrowser } from '../src/browser.mjs';
 import { info, fail, bold } from '../src/log.mjs';
 
-import initCommand from '../src/commands/init.mjs';
-import serveCommand from '../src/commands/serve.mjs';
-import shotCommand from '../src/commands/shot.mjs';
-import tasksCommand from '../src/commands/tasks.mjs';
-import dashboardCommand from '../src/commands/dashboard.mjs';
-import qaCommand from '../src/commands/qa.mjs';
-import loginCommand from '../src/commands/login.mjs';
-import proposeCommand from '../src/commands/propose.mjs';
-import inspectCommand from '../src/commands/inspect.mjs';
-import watchdCommand from '../src/commands/watchd.mjs';
-import workCommand from '../src/commands/work.mjs';
-import verifyCommand from '../src/commands/verify.mjs';
-import previewCommand from '../src/commands/preview.mjs';
-import brainsCommand from '../src/commands/brains.mjs';
-import agentsCommand from '../src/commands/agents.mjs';
-import sayCommand from '../src/commands/say.mjs';
-import eventsCommand from '../src/commands/events.mjs';
-import designCommand from '../src/commands/design.mjs';
-import tasteCommand from '../src/commands/taste.mjs';
-import watchCommand from '../src/commands/watch.mjs';
-import taskCommand from '../src/commands/task.mjs';
-import cleanCommand from '../src/commands/clean.mjs';
-import auditCommand from '../src/commands/audit.mjs';
-import flowCommand from '../src/commands/flow.mjs';
-import annotateCommand from '../src/commands/annotate.mjs';
-import appliedCommand from '../src/commands/applied.mjs';
-import followCommand from '../src/commands/follow.mjs';
-import statusCommand from '../src/commands/status.mjs';
-import commentsCommand from '../src/commands/comments.mjs';
-import snapshotCommand from '../src/commands/snapshot.mjs';
-import restoreCommand from '../src/commands/restore.mjs';
-import recordCommand from '../src/commands/record.mjs';
-import critiqueCommand from '../src/commands/critique.mjs';
-import reportCommand from '../src/commands/report.mjs';
-import loopCommand from '../src/commands/loop.mjs';
+import * as commands from '../src/commands/index.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -337,118 +303,13 @@ async function main() {
     prepare,
   };
 
-  switch (command) {
-    case 'init':
-      return initCommand(ctx);
-
-    case 'serve':
-      return serveCommand(ctx);
-
-    case 'shot':
-      return shotCommand(ctx);
-
-    case 'tasks':
-      return tasksCommand(ctx);
-
-    case 'dashboard':
-      return dashboardCommand(ctx);
-
-    case 'qa':
-      return qaCommand(ctx);
-
-    case 'login':
-      return loginCommand(ctx);
-
-    case 'propose':
-      return proposeCommand(ctx);
-
-    case 'inspect':
-      return inspectCommand(ctx);
-
-    case 'watchd':
-      return watchdCommand(ctx);
-
-    case 'work':
-      return workCommand(ctx);
-
-    case 'verify':
-      return verifyCommand(ctx);
-
-    case 'preview':
-      return previewCommand(ctx);
-
-    case 'brains':
-      return brainsCommand(ctx);
-
-    case 'agents':
-      return agentsCommand(ctx);
-
-    case 'say':
-      return sayCommand(ctx);
-
-    case 'events':
-      return eventsCommand(ctx);
-
-    case 'design':
-      return designCommand(ctx);
-
-    case 'taste':
-      return tasteCommand(ctx);
-
-    case 'watch':
-      return watchCommand(ctx);
-
-    case 'task':
-      return taskCommand(ctx);
-
-    case 'clean':
-      return cleanCommand(ctx);
-
-    case 'audit':
-      return auditCommand(ctx);
-
-    case 'flow':
-      return flowCommand(ctx);
-
-    case 'annotate':
-      return annotateCommand(ctx);
-
-    case 'applied':
-      return appliedCommand(ctx);
-
-    case 'wait':
-    case 'follow':
-      return followCommand(ctx);
-
-    case 'status':
-      return statusCommand(ctx);
-
-    case 'comments':
-      return commentsCommand(ctx);
-
-    case 'snapshot':
-      return snapshotCommand(ctx);
-
-    case 'restore':
-      return restoreCommand(ctx);
-
-    case 'record':
-      return recordCommand(ctx);
-
-    case 'critique':
-      return critiqueCommand(ctx);
-
-    case 'report':
-      return reportCommand(ctx);
-
-    case 'loop':
-      return loopCommand(ctx);
-
-    default:
-      fail(`unknown command: ${command}`);
-      console.log(HELP);
-      process.exitCode = 1;
+  if (!Object.hasOwn(commands, command)) {
+    fail(`unknown command: ${command}`);
+    console.log(HELP);
+    process.exitCode = 1;
+    return;
   }
+  return commands[command](ctx);
 }
 
 /**
