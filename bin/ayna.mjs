@@ -41,6 +41,7 @@ import previewCommand from '../src/commands/preview.mjs';
 import brainsCommand from '../src/commands/brains.mjs';
 import agentsCommand from '../src/commands/agents.mjs';
 import sayCommand from '../src/commands/say.mjs';
+import eventsCommand from '../src/commands/events.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -358,13 +359,6 @@ async function main() {
     case 'propose':
       return proposeCommand(ctx);
 
-    /*
-      What happened while nobody was looking.
-
-      `watch` announces changes from now on, which is useless to a session that
-      starts after the fact — and that is the common case, because sessions end
-      and reviews do not. This reads the log instead, so being late costs nothing.
-    */
     case 'inspect':
       return inspectCommand(ctx);
 
@@ -389,38 +383,8 @@ async function main() {
     case 'say':
       return sayCommand(ctx);
 
-    case 'events': {
-      const { since, drain, follow } = await import('../src/events.mjs');
-      const consumer = values.consumer ?? null;
-
-      if (values.follow) {
-        const controller = new AbortController();
-        for (const sig of ['SIGINT', 'SIGTERM']) {
-          process.on(sig, () => {
-            controller.abort();
-            process.exit(0);
-          });
-        }
-        await follow(PROJECT, {
-          consumer,
-          signal: controller.signal,
-          onEvent: (e) => console.log(JSON.stringify(e)),
-        });
-        return;
-      }
-
-      const result = consumer
-        ? await drain(PROJECT, consumer)
-        : await since(PROJECT, { since: values.since ?? 0 });
-
-      if (values.ndjson) {
-        // One line per event, so `events` and `events --follow` pipe the same way.
-        for (const e of result.events) console.log(JSON.stringify(e));
-      } else {
-        console.log(JSON.stringify({ ...result, count: result.events.length }, null, 2));
-      }
-      return;
-    }
+    case 'events':
+      return eventsCommand(ctx);
 
     /*
       What ayna cannot measure.
