@@ -55,6 +55,7 @@ import followCommand from '../src/commands/follow.mjs';
 import statusCommand from '../src/commands/status.mjs';
 import commentsCommand from '../src/commands/comments.mjs';
 import snapshotCommand from '../src/commands/snapshot.mjs';
+import restoreCommand from '../src/commands/restore.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -439,19 +440,8 @@ async function main() {
     case 'snapshot':
       return snapshotCommand(ctx);
 
-    case 'restore': {
-      const session = process.env.AYNA_SESSION;
-      let src = session
-        ? path.join(SESSION_DIR, 'snapshots', String(session).replace(/[^a-zA-Z0-9_-]/g, '_'))
-        : path.join(SESSION_DIR, 'snapshot');
-      if (!existsSync(src) && existsSync(path.join(SESSION_DIR, 'snapshot'))) {
-        src = path.join(SESSION_DIR, 'snapshot');
-      }
-      if (!existsSync(src)) throw new Error('no snapshot to restore — run `ayna snapshot` first');
-      await restore(src, cfg.targetDir);
-      ok(`restored ${path.relative(PROJECT, cfg.targetDir)}`);
-      return;
-    }
+    case 'restore':
+      return restoreCommand(ctx);
 
     case 'record': {
       await mkdir(SESSION_DIR, { recursive: true });
