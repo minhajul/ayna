@@ -25,6 +25,8 @@ import { waitForLogin } from '../src/login.mjs';
 import { writeReport } from '../src/report.mjs';
 import { banner, step, ok, info, warn, fail, dim, bold, cyan, green, yellow, red, openInDesktop } from '../src/log.mjs';
 
+import initCommand from '../src/commands/init.mjs';
+
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const HELP = `
@@ -317,18 +319,8 @@ async function main() {
   };
 
   switch (command) {
-    case 'init': {
-      // PROJECT, not ROOT: `ayna init` is how you configure *your* project. Writing
-      // to ROOT put the file in the plugin's own directory, clobbering its config
-      // while leaving the project exactly as unconfigured as before.
-      if (hasLocalConfig) {
-        warn(`${path.relative(PROJECT, localConfig)} already exists — leaving it alone`);
-        return;
-      }
-      const file = await writeConfig(PROJECT);
-      ok(`wrote ${path.relative(PROJECT, file)} — set target.url or target.root, then run \`ayna shot\``);
-      return;
-    }
+    case 'init':
+      return initCommand(ctx);
 
     case 'serve': {
       const wanted = values.port ? Number(values.port) : cfg.target.port;
