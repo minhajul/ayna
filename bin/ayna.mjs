@@ -35,6 +35,7 @@ import loginCommand from '../src/commands/login.mjs';
 import proposeCommand from '../src/commands/propose.mjs';
 import inspectCommand from '../src/commands/inspect.mjs';
 import watchdCommand from '../src/commands/watchd.mjs';
+import workCommand from '../src/commands/work.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -374,71 +375,14 @@ async function main() {
       is how a task list stops being read, and once it stops being read the
       unsolved ones go with it.
     */
-    /*
-      Work the queue without a Claude session in front of it.
-
-      Sessions end and terminals get closed; the queue outlives both. This takes
-      tasks off the same store every other tool reads, claims each one so nothing
-      is done twice, and checks before and after.
-    */
     case 'inspect':
       return inspectCommand(ctx);
 
     case 'watchd':
       return watchdCommand(ctx);
 
-    case 'work': {
-      const { work, brainFor } = await import('../src/worker.mjs');
-      const { verifyTasks } = await import('../src/verify.mjs');
-      const cfg = await loadConfig(PROJECT);
-      const store = await openStore(PROJECT);
-      await importLegacy(PROJECT, store);
-
-      const brain = brainFor(cfg, values.brain);
-      const server = await startTarget(cfg).catch(() => null);
-      const browser = server ? await openBrowser({ headless: true, browser: browserMode(cfg) }) : null;
-
-      // One browser for the whole run, handed to the checker.
-      const verify = browser
-        ? (tasks) =>
-            verifyTasks({
-              browser,
-              url: server.url,
-              tasks,
-              viewport: cfg.viewports[0],
-            }).catch(() => tasks.map((t) => ({ id: t.id, verdict: 'unknown' })))
-        : null;
-
-      const say = values.json ? () => {} : (m) => info(m);
-      if (!values.json) banner(`ayna work · ${brain.name}`);
-
-      try {
-        const result = await work({
-          projectDir: PROJECT,
-          cfg,
-          brain,
-          verify,
-          limit: values.iterations ? Number(values.iterations) : Infinity,
-          onEvent: (e) => {
-            if (values.json) return;
-            if (e.event === 'working') say(`${e.taskId} — ${e.comment ?? ''}`);
-            else if (e.event === 'applied') say(`${e.taskId} ${e.outcome}${e.outcome === 'still-broken' ? ' ✗' : ' ✓'}`);
-            else if (e.event === 'failed') fail(`${e.taskId} — ${e.why}`);
-            else if (e.event === 'task') say(`${e.taskId} was already fixed`);
-          },
-        });
-
-        if (values.json) console.log(JSON.stringify(result, null, 2));
-        else {
-          console.log('');
-          ok(`${result.worked} task${result.worked === 1 ? '' : 's'} worked`);
-        }
-      } finally {
-        await browser?.close().catch(() => {});
-        await server?.close().catch(() => {});
-      }
-      return;
-    }
+    case 'work':
+      return workCommand(ctx);
 
     case 'verify': {
       const { verifyTasks, applyVerdicts } = await import('../src/verify.mjs');
