@@ -55,9 +55,9 @@ export default async function cleanCommand(ctx) {
   */
   let pruned = 0;
   try {
-    const { openDb, pruneEvents, checkpoint } = await import('../db.mjs');
+    const { openDb, pruneEvents, checkpoint, dbPath } = await import('../db.mjs');
     const { existsSync: has } = await import('node:fs');
-    const dbFile = path.join(PROJECT, '.ayna', 'ayna.db');
+    const dbFile = dbPath(PROJECT);
     if (has(dbFile)) {
       const db = await openDb(PROJECT);
       const before = (await stat(dbFile).catch(() => ({ size: 0 }))).size;

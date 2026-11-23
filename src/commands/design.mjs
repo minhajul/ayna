@@ -25,7 +25,7 @@ export default async function designCommand(ctx) {
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const outDir = path.join(PROJECT, '.ayna', 'design', stamp);
-  const server = values.url ? null : await startTarget(cfg);
+  const server = await startTarget(cfg);
   const target = values.url ?? new URL(routes[0] ?? '/', server.url).toString();
 
   const browser = await openBrowser({ headless: headlessMode(cfg), browser: browserMode(cfg) });
@@ -53,7 +53,7 @@ export default async function designCommand(ctx) {
     ? { available: false, findings: [], hint: '--no-taste: design opinions were skipped' }
     : await judgeTaste(target, { cwd: PROJECT });
 
-  await server?.close().catch(() => {});
+  await server.close().catch(() => {});
 
   const result = recommend({ audit: report, taste });
 

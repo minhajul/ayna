@@ -10,9 +10,7 @@ export default async function dashboardCommand(ctx) {
   // wears the project's ayna theme, the same one the review window does.
   // Opened from a review window's Dashboard button instead, it stays live.
   const { writeDashboard } = await import('../dashboard.mjs');
-  const outDir = values['out-dir']
-    ? path.resolve(PROJECT, values['out-dir'])
-    : path.join(PROJECT, '.ayna', 'dashboard');
+  const outDir = values['out-dir'] ? path.resolve(PROJECT, values['out-dir']) : undefined;
   const { file, data } = await writeDashboard(PROJECT, { outDir, theme: cfg.theme });
 
   if (values.json) {

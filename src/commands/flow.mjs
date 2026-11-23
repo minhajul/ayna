@@ -32,7 +32,7 @@ export default async function flowCommand(ctx) {
     codebase open and is the better author. It needs the page, not a rival.
   */
   if (values.draft != null) {
-    const server = values.url ? null : await startTarget(cfg);
+    const server = await startTarget(cfg);
     // Draft reads the page so the flow can be written against what is really
     // there. A flow itself reuses the saved profile (see the run branch
     // below), so drafting from a FRESH context reads a different page than
@@ -60,7 +60,7 @@ export default async function flowCommand(ctx) {
     } finally {
       await ctx?.close().catch(() => {});
       await browser?.close().catch(() => {});
-      await server?.close().catch(() => {});
+      await server.close().catch(() => {});
     }
     return;
   }
