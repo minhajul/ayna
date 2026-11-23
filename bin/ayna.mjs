@@ -57,6 +57,7 @@ import commentsCommand from '../src/commands/comments.mjs';
 import snapshotCommand from '../src/commands/snapshot.mjs';
 import restoreCommand from '../src/commands/restore.mjs';
 import recordCommand from '../src/commands/record.mjs';
+import critiqueCommand from '../src/commands/critique.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -447,52 +448,8 @@ async function main() {
     case 'record':
       return recordCommand(ctx);
 
-    case 'critique': {
-      const brain = resolveBrain(cfg, values.brain);
-      const probe = await ensureAgent(brain.name);
-      if (!probe.ok) throw new Error(`the \`${brain.cmd}\` CLI was not found on PATH`);
-
-      const { browser, url, close, outDir } = await prepare(cfg, 'critique');
-      step('look', `screenshotting ${routes.length} route(s)`);
-      const cap = await captureRoutes({
-        browser,
-        baseUrl: url,
-        routes,
-        viewports: cfg.viewports,
-        outDir,
-        label: 'before',
-      });
-      for (const s of cap.shots) {
-        ok(`${s.route ?? '/'} ${s.viewport} → ${path.relative(process.cwd(), s.file)}`);
-      }
-
-      step('critique', 'asking the design critic what is wrong');
-      const run = await runAgent({
-        agent: brain.name,
-        prompt: critiquePrompt({ cfg, capture: cap, iteration: 1 }),
-        cwd: cfg.rootDir,
-        tools: ['Read', 'Glob', 'Grep'],
-        model: values.model ?? cfg.loop.model,
-        schema: CRITIQUE_SCHEMA,
-      });
-      await close();
-
-      const c = run.json;
-      if (!c) {
-        fail('no structured critique came back');
-        console.log(run.text);
-        return;
-      }
-      const col = c.score >= 8 ? green : c.score >= 5 ? yellow : red;
-      banner(`score ${col(bold(`${c.score}/10`))}`);
-      console.log(`  ${c.verdict}\n`);
-      for (const i of c.issues) {
-        const sev = i.severity === 'critical' ? red : i.severity === 'major' ? yellow : dim;
-        console.log(`  ${sev(`[${i.severity}]`)} ${bold(i.area)} — ${i.problem}`);
-        console.log(`    ${dim(`→ ${i.fix}`)}\n`);
-      }
-      return;
-    }
+    case 'critique':
+      return critiqueCommand(ctx);
 
     case 'report': {
       // An in-session loop journals its rounds; build the report from those first.
