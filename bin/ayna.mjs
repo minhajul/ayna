@@ -296,6 +296,26 @@ async function main() {
     cfg.target.startCommand = null;
   }
 
+  const ctx = {
+    values,
+    positionals,
+    cfg,
+    routes,
+    hasLocalConfig,
+    localConfig,
+    PROJECT,
+    SESSION_DIR,
+    JOURNAL,
+    cliFile: fileURLToPath(import.meta.url),
+    readSession,
+    liveWindow,
+    followSession,
+    markPickedUp,
+    headlessMode,
+    browserMode,
+    prepare,
+  };
+
   switch (command) {
     case 'init': {
       // PROJECT, not ROOT: `ayna init` is how you configure *your* project. Writing
